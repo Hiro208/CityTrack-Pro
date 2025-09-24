@@ -1,4 +1,4 @@
-import { Pool, QueryResult, QueryResultRow } from 'pg'; // 👈 必须引入 QueryResultRow
+import { Pool, QueryResult, QueryResultRow } from 'pg'; 
 import { env } from './env';
 
 const pool = new Pool({
