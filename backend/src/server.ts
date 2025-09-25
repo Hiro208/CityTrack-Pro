@@ -4,6 +4,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { env } from './config/env';
 import { query } from './config/database';
+import { MtaService } from './services/mtaService'; // 👈 引入 Service
 
 const app = express();
 
@@ -28,22 +29,29 @@ app.get('/health', async (req, res) => {
   }
 });
 
+
+
 // --- 启动服务器 ---
 const startServer = async () => {
   try {
-    // 1. 先测试数据库连接
     await query('SELECT 1');
     console.log('✅ 数据库连接成功!');
 
-    // 2. 启动 HTTP 服务
     app.listen(env.PORT, () => {
       console.log(`\n🚀 Server running in ${env.NODE_ENV} mode on port ${env.PORT}`);
-      console.log(`🔗 Health Check: http://localhost:${env.PORT}/health`);
     });
 
+    //启动定时抓取任务 (每 10 秒一次)
+    console.log('⏱️ 初始化定时抓取任务...');
+    setInterval(() => {
+        MtaService.fetchAndSaveAllFeeds();
+    }, 10000); 
+    
+    // 立即执行一次
+    MtaService.fetchAndSaveAllFeeds();
+
   } catch (error) {
-    console.error('❌ 启动失败:', error);
-    process.exit(1);
+    // ...
   }
 };
 

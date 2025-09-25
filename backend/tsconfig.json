@@ -4,15 +4,15 @@
     "module": "commonjs",
     "rootDir": "./src",
     "outDir": "./dist",
-    "strict": true,               /* 🔥 核心：开启严格模式 */
+    "strict": true,              
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "removeComments": true,       /* 生产环境移除注释 */
+    "removeComments": true,      
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]            /* 设置路径别名，比如用 @/config 引入文件 */
+      "@/*": ["src/*"]           
     }
   },
   "include": ["src/**/*"],
