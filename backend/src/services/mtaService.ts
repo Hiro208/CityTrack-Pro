@@ -3,6 +3,7 @@ import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { env } from '../config/env';
 import { FEED_URLS, TERMINAL_MAP } from '../config/constants';
 import { VehicleRepository } from '../repositories/vehicleRepository';
+import redisClient from '../config/redis'; // 👈 引入 redis
 
 export class MtaService {
   
@@ -29,10 +30,16 @@ export class MtaService {
 
     // 存入数据库
     if (allVehicles.length > 0) {
+      // 存入数据库 (持久化)
       await VehicleRepository.saveBatch(allVehicles);
+      
+      // 同步存入 Redis (实时缓存)
+      await redisClient.set('vehicles:all', JSON.stringify(allVehicles), {
+        EX: 60 
+      });
     }
     
-    //清理旧数据 
+    // 清理旧数据 
     await VehicleRepository.pruneOldData();
 
     console.log(`✅ 完成！共处理 ${allVehicles.length} 辆车，耗时 ${Date.now() - startTime}ms`);

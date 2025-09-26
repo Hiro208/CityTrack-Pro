@@ -4,7 +4,8 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { env } from './config/env';
 import { query } from './config/database';
-import { MtaService } from './services/mtaService'; // 👈 引入 Service
+import { MtaService } from './services/mtaService'; //  引入 Service
+import vehicleRoutes from './routes/vehicleRoutes'; //  引入路由
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(helmet()); // 安全头
 app.use(cors());   // 跨域
 app.use(express.json()); // 解析 JSON
 app.use(morgan('dev'));  // 日志
+app.use('/api/vehicles', vehicleRoutes); //  注册车辆路由
 
 // --- 测试路由 ---
 app.get('/health', async (req, res) => {

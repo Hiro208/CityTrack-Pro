@@ -1,18 +1,31 @@
 import { query } from '../config/database';
 import pool from '../config/database';
 import { VehiclePositionRow } from '../models/Vehicle'; 
+import redisClient from '../config/redis';
 
 export class VehicleRepository {
   
   static async findAll(): Promise<VehiclePositionRow[]> {
+    // 尝试从 Redis 获取缓存
+    const cachedData = await redisClient.get('vehicles:all');
+    
+    if (cachedData) {
+      // console.log('🚀 Cache Hit! (从 Redis 读取)');
+      return JSON.parse(cachedData);
+    }
+
+    // 缓存失效，查数据库
+    console.log('🐢 Cache Miss! (从数据库读取)');
     const sql = `
       SELECT * FROM vehicle_positions 
       WHERE timestamp > (EXTRACT(EPOCH FROM NOW()) - 300)
       ORDER BY route_id ASC
     `;
-    
     const result = await query<VehiclePositionRow>(sql);
-    
+  
+    await redisClient.set('vehicles:all', JSON.stringify(result.rows), {
+      EX: 60 
+    });
     return result.rows;
   }
 
