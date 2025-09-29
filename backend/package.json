@@ -8,15 +8,18 @@
     "build": "rimraf dist && tsc",
     "start": "node dist/server.js",
     "type-check": "tsc --noEmit",
-    "db:init": "ts-node -r tsconfig-paths/register src/scripts/init-db.ts"
+    "db:init": "ts-node -r tsconfig-paths/register src/scripts/init-db.ts",
+    "stops:fetch": "ts-node -r tsconfig-paths/register src/scripts/fetch-stops.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "axios": "^1.13.5",
     "cors": "^2.8.6",
+    "csv-parse": "^6.1.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "gtfs-realtime-bindings": "^1.1.1",

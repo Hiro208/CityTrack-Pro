@@ -3,8 +3,11 @@
 export interface Vehicle {
   trip_id: string;
   route_id: string;
-  latitude: number;
-  longitude: number;
+  /** 后端返回 lat/lon，前端兼容 latitude/longitude */
+  lat?: number;
+  lon?: number;
+  latitude?: number;
+  longitude?: number;
   direction: string; // "N", "S", "E", "W"
   destination: string;
   stop_name: string;
