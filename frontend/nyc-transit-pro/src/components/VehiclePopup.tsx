@@ -9,13 +9,35 @@ interface Props {
   info: { lng: number; lat: number; props: Vehicle };
 }
 
+const formatStatus = (status?: string): string => {
+  const raw = (status || '').toUpperCase();
+  const statusMap: Record<string, string> = {
+    IN_TRANSIT_TO: 'In Transit',
+    STOPPED_AT: 'Stopped At Station',
+    INCOMING_AT: 'Arriving',
+    '0': 'Arriving',
+    '1': 'Stopped At Station',
+    '2': 'In Transit',
+  };
+  return statusMap[raw] || status || 'Unknown';
+};
+
+const formatDirection = (direction?: string): string => {
+  if (!direction) return 'Direction Unknown';
+  if (direction === 'N') return 'Northbound';
+  if (direction === 'S') return 'Southbound';
+  if (direction === 'E') return 'Eastbound';
+  if (direction === 'W') return 'Westbound';
+  return direction;
+};
+
 const VehiclePopup: React.FC<Props> = ({ info }) => {
   const { props: v } = info;
   const color = ROUTE_COLORS[v.route_id] || '#808183';
   
   // 智能解析方向 (如果在字典里找不到，就用 N/S)
   const termData = TERMINAL_MAP[v.route_id]?.[v.direction];
-  const directionText = termData?.dir || (v.direction === 'N' ? 'Northbound' : 'Southbound');
+  const directionText = termData?.dir || formatDirection(v.direction);
   
   // 优先显示 API 返回的 destination，如果没有则查字典
   const destinationText = v.destination || termData?.term || "Unknown Terminal";
@@ -60,7 +82,7 @@ const VehiclePopup: React.FC<Props> = ({ info }) => {
           {v.stop_name || "In Transit"}
         </div>
         <div className="text-[9px] text-gray-500 mt-1 flex justify-between">
-           <span>Status: {v.current_status}</span>
+           <span>Status: {formatStatus(v.current_status)}</span>
            <span className="font-mono opacity-50">ID: {v.trip_id}</span>
         </div>
       </div>

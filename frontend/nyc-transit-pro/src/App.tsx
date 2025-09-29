@@ -55,10 +55,22 @@ const TransitMap = () => {
             id="transit-glow"
             type="circle"
             paint={{
-              'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 8, 14, 20],
+              'circle-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                8,
+                20,
+                10,
+                27,
+                12,
+                34,
+                14,
+                38
+              ],
               'circle-color': layerColorExpression as any, // 动态颜色
-              'circle-opacity': 0.4,
-              'circle-blur': 0.5
+              'circle-opacity': 0.34,
+              'circle-blur': 0.9
             }}
             beforeId="transit-point"
           />

@@ -29,6 +29,13 @@ function getStopCoords(stopId: string): { lat: number; lon: number } | null {
   return null;
 }
 
+function getStopDisplayName(stopId: string): string {
+  if (!stopId) return 'Unknown Stop';
+  const s = STOPS_MAP[stopId] || STOPS_MAP[stopId.replace(/[NS]$/, '')];
+  if (!s?.name) return stopId;
+  return `${s.name} (${stopId})`;
+}
+
 export class MtaService {
   /**
    * 主入口：抓取所有线路并保存
@@ -157,7 +164,7 @@ export class MtaService {
         lat,
         lon,
         timestamp,
-        stop_name: stopId,
+        stop_name: getStopDisplayName(stopId),
         current_status: currentStatus,
         direction,
         destination,
@@ -210,7 +217,7 @@ export class MtaService {
           lat: coords.lat,
           lon: coords.lon,
           timestamp,
-          stop_name: stopId,
+          stop_name: getStopDisplayName(stopId),
           current_status: 'IN_TRANSIT_TO',
           direction,
           destination,
