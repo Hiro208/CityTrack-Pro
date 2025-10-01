@@ -7,6 +7,9 @@ import { MapPin, Navigation } from 'lucide-react'; // 漂亮的图标库
 interface Props {
   // 这里的 info 结构要匹配 react-map-gl 的事件返回
   info: { lng: number; lat: number; props: Vehicle };
+  canFavoriteStop?: boolean;
+  isStopFavorited?: boolean;
+  onToggleFavoriteStop?: (stopName: string) => void;
 }
 
 const formatStatus = (status?: string): string => {
@@ -31,7 +34,13 @@ const formatDirection = (direction?: string): string => {
   return direction;
 };
 
-const VehiclePopup: React.FC<Props> = ({ info }) => {
+const extractStopCode = (stopName?: string): string => {
+  if (!stopName) return '';
+  const match = stopName.match(/\(([A-Z0-9]+)\)\s*$/i);
+  return match ? match[1].toUpperCase() : stopName.trim().toUpperCase();
+};
+
+const VehiclePopup: React.FC<Props> = ({ info, canFavoriteStop, isStopFavorited, onToggleFavoriteStop }) => {
   const { props: v } = info;
   const color = ROUTE_COLORS[v.route_id] || '#808183';
   
@@ -75,8 +84,21 @@ const VehiclePopup: React.FC<Props> = ({ info }) => {
 
       {/* 底部：当前位置 */}
       <div className="bg-white/5 rounded-lg p-2 border border-white/5 backdrop-blur-sm">
-        <div className="flex items-center gap-1 text-[10px] text-gray-400 mb-1">
+        <div className="flex items-center justify-between gap-1 text-[10px] text-gray-400 mb-1">
+          <div className="flex items-center gap-1">
           <MapPin size={10} /> Current Stop
+          </div>
+          <button
+            type="button"
+            disabled={!canFavoriteStop || !v.stop_name}
+            onClick={() => v.stop_name && onToggleFavoriteStop?.(v.stop_name)}
+            className={`text-sm leading-none ${
+              isStopFavorited ? 'text-yellow-300' : 'text-gray-500'
+            } ${!canFavoriteStop ? 'opacity-40 cursor-not-allowed' : ''}`}
+            title={!canFavoriteStop ? '登录后可收藏站点' : `收藏站点 ${extractStopCode(v.stop_name)}`}
+          >
+            ★
+          </button>
         </div>
         <div className="text-sm font-semibold text-green-300">
           {v.stop_name || "In Transit"}

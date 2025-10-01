@@ -1,11 +1,25 @@
 // src/App.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Map, { Source, Layer, NavigationControl, Popup, GeolocateControl } from 'react-map-gl';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useVehicles } from './hooks/useVehicles';
 import ControlPanel from './components/ControlPanel';
 import VehiclePopup from './components/VehiclePopup';
-import type { Vehicle } from './types/transit';
+import type { ServiceAlert, User, Vehicle } from './types/transit';
+import {
+  addFavoriteRoute,
+  addFavoriteStop,
+  clearStoredToken,
+  fetchFavorites,
+  fetchMe,
+  fetchMyNotifications,
+  getStoredToken,
+  login,
+  register,
+  removeFavoriteRoute,
+  removeFavoriteStop,
+  setStoredToken,
+} from './api/transitApi';
 
 // 引入 Mapbox 的默认样式表 (必须！)
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -14,14 +28,121 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 const queryClient = new QueryClient();
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN; // 从环境变量获取 Mapbox Token
 
+const extractStopCode = (stopName?: string): string => {
+  if (!stopName) return '';
+  const match = stopName.match(/\(([A-Z0-9]+)\)\s*$/i);
+  return match ? match[1].toUpperCase() : stopName.trim().toUpperCase();
+};
+
 //为了代码整洁，我们将地图逻辑拆分为一个子组件
 const TransitMap = () => {
   const [selectedRoute, setSelectedRoute] = useState('ALL');
   const [hoverInfo, setHoverInfo] = useState<{ lng: number; lat: number; props: Vehicle } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authForm, setAuthForm] = useState({ email: '', password: '' });
+  const [favoriteRoutes, setFavoriteRoutes] = useState<Set<string>>(new Set());
+  const [favoriteStops, setFavoriteStops] = useState<Set<string>>(new Set());
+  const [notifications, setNotifications] = useState<ServiceAlert[]>([]);
   
   // 核心：调用我们要自定义 Hook 获取数据
   const { geoJSON, count, layerColorExpression } = useVehicles(selectedRoute);
-  console.log("地图数据检查:", geoJSON);
+
+  const refreshUserData = async () => {
+    if (!getStoredToken()) return;
+    const me = await fetchMe();
+    if (!me) {
+      clearStoredToken();
+      setUser(null);
+      setFavoriteRoutes(new Set());
+      setFavoriteStops(new Set());
+      setNotifications([]);
+      return;
+    }
+    setUser(me);
+    const fav = await fetchFavorites();
+    setFavoriteRoutes(new Set(fav.routes.map((r) => r.route_id.toUpperCase())));
+    setFavoriteStops(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
+    const myAlerts = await fetchMyNotifications();
+    setNotifications(myAlerts);
+  };
+
+  useEffect(() => {
+    refreshUserData();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setInterval(async () => {
+      const myAlerts = await fetchMyNotifications();
+      setNotifications(myAlerts);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [user]);
+
+  const handleSubmitAuth = async () => {
+    try {
+      if (!authForm.email || !authForm.password) return;
+      const result = authMode === 'login'
+        ? await login(authForm.email, authForm.password)
+        : await register(authForm.email, authForm.password);
+      setStoredToken(result.token);
+      setUser(result.user);
+      setAuthForm({ email: '', password: '' });
+      await refreshUserData();
+    } catch (e) {
+      console.error('Auth failed:', e);
+      alert(authMode === 'login' ? '登录失败，请检查账号密码' : '注册失败，可能邮箱已存在');
+    }
+  };
+
+  const handleLogout = () => {
+    clearStoredToken();
+    setUser(null);
+    setFavoriteRoutes(new Set());
+    setFavoriteStops(new Set());
+    setNotifications([]);
+  };
+
+  const handleToggleRouteFavorite = async (routeId: string) => {
+    if (!user) return;
+    const key = routeId.toUpperCase();
+    try {
+      if (favoriteRoutes.has(key)) {
+        await removeFavoriteRoute(key);
+      } else {
+        await addFavoriteRoute(key);
+      }
+      const fav = await fetchFavorites();
+      setFavoriteRoutes(new Set(fav.routes.map((r) => r.route_id.toUpperCase())));
+      setFavoriteStops(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
+      setNotifications(await fetchMyNotifications());
+    } catch (e) {
+      console.error('Toggle route favorite failed', e);
+    }
+  };
+
+  const handleToggleStopFavorite = async (stopDisplayName: string) => {
+    if (!user) return;
+    const stopId = extractStopCode(stopDisplayName);
+    if (!stopId) return;
+    try {
+      if (favoriteStops.has(stopId)) {
+        await removeFavoriteStop(stopId);
+      } else {
+        await addFavoriteStop(stopId, stopDisplayName);
+      }
+      const fav = await fetchFavorites();
+      setFavoriteRoutes(new Set(fav.routes.map((r) => r.route_id.toUpperCase())));
+      setFavoriteStops(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
+      setNotifications(await fetchMyNotifications());
+    } catch (e) {
+      console.error('Toggle stop favorite failed', e);
+    }
+  };
+
+  const hoveredStopId = useMemo(() => extractStopCode(hoverInfo?.props.stop_name), [hoverInfo]);
+
   return (
     <div className="w-screen h-screen bg-black relative overflow-hidden">
       <Map
@@ -100,7 +221,12 @@ const TransitMap = () => {
             maxWidth="320px"
             className="transit-popup" // 样式在 index.css 定义
           >
-            <VehiclePopup info={hoverInfo} />
+            <VehiclePopup
+              info={hoverInfo}
+              canFavoriteStop={!!user}
+              isStopFavorited={hoveredStopId ? favoriteStops.has(hoveredStopId) : false}
+              onToggleFavoriteStop={handleToggleStopFavorite}
+            />
           </Popup>
         )}
       </Map>
@@ -110,6 +236,16 @@ const TransitMap = () => {
         selectedRoute={selectedRoute} 
         onSelectRoute={setSelectedRoute} 
         count={count}
+        user={user}
+        authMode={authMode}
+        authForm={authForm}
+        onAuthModeChange={setAuthMode}
+        onAuthFormChange={setAuthForm}
+        onSubmitAuth={handleSubmitAuth}
+        onLogout={handleLogout}
+        favoriteRoutes={favoriteRoutes}
+        onToggleRouteFavorite={handleToggleRouteFavorite}
+        notifications={notifications}
       />
     </div>
   );

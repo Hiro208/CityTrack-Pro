@@ -15,6 +15,31 @@ export interface Vehicle {
   timestamp: number;
 }
 
+export interface User {
+  id: number;
+  email: string;
+}
+
+export interface FavoriteRoute {
+  route_id: string;
+}
+
+export interface FavoriteStop {
+  stop_id: string;
+  stop_name?: string | null;
+}
+
+export interface ServiceAlert {
+  id: string;
+  header_text?: string | null;
+  description_text?: string | null;
+  effect_text?: string | null;
+  cause_text?: string | null;
+  route_ids: string[];
+  stop_ids: string[];
+  updated_at: number;
+}
+
 // 终点站字典的结构定义
 export interface TerminalInfo {
   term: string; // 终点站名称

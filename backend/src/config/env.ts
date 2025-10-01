@@ -19,6 +19,8 @@ const envSchema = z.object({
   //Redis 配置校验
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.string().default('6379').transform((val) => parseInt(val, 10)),
+  JWT_SECRET: z.string().default('change-me-in-production'),
+  MTA_API_KEY: z.string().optional(),
 });
 
 // 解析并导出

@@ -1,18 +1,89 @@
 // src/api/transitApi.ts
 import axios from 'axios';
-import type { Vehicle } from '../types/transit';
+import type { FavoriteRoute, FavoriteStop, ServiceAlert, User, Vehicle } from '../types/transit';
 
 // 如果你的后端端口是 5001，请保持这个地址
 const API_BASE_URL = 'http://localhost:5001/api';
+const TOKEN_KEY = 'transit_auth_token';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const getStoredToken = () => localStorage.getItem(TOKEN_KEY);
+export const setStoredToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
+export const clearStoredToken = () => localStorage.removeItem(TOKEN_KEY);
 
 export const fetchVehicles = async (): Promise<Vehicle[]> => {
   try {
-    const response = await axios.get<{ success: boolean; data: Vehicle[] }>(
-      `${API_BASE_URL}/vehicles`
+    const response = await api.get<{ success: boolean; data: Vehicle[] }>(
+      `/vehicles`
     );
     return response.data.data;
   } catch (error) {
     console.error('Failed to fetch vehicles:', error);
     return []; // 出错时返回空数组，防止页面崩溃
   }
+};
+
+export const register = async (email: string, password: string): Promise<{ token: string; user: User }> => {
+  const response = await api.post<{ success: boolean; token: string; user: User }>(
+    '/auth/register',
+    { email, password }
+  );
+  return { token: response.data.token, user: response.data.user };
+};
+
+export const login = async (email: string, password: string): Promise<{ token: string; user: User }> => {
+  const response = await api.post<{ success: boolean; token: string; user: User }>(
+    '/auth/login',
+    { email, password }
+  );
+  return { token: response.data.token, user: response.data.user };
+};
+
+export const fetchMe = async (): Promise<User | null> => {
+  try {
+    const response = await api.get<{ success: boolean; user: User }>('/auth/me');
+    return response.data.user;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const fetchFavorites = async (): Promise<{ routes: FavoriteRoute[]; stops: FavoriteStop[] }> => {
+  const response = await api.get<{ success: boolean; data: { routes: FavoriteRoute[]; stops: FavoriteStop[] } }>(
+    '/favorites'
+  );
+  return response.data.data;
+};
+
+export const addFavoriteRoute = async (routeId: string): Promise<void> => {
+  await api.post('/favorites/routes', { route_id: routeId });
+};
+
+export const removeFavoriteRoute = async (routeId: string): Promise<void> => {
+  await api.delete(`/favorites/routes/${encodeURIComponent(routeId)}`);
+};
+
+export const addFavoriteStop = async (stopId: string, stopName: string): Promise<void> => {
+  await api.post('/favorites/stops', { stop_id: stopId, stop_name: stopName });
+};
+
+export const removeFavoriteStop = async (stopId: string): Promise<void> => {
+  await api.delete(`/favorites/stops/${encodeURIComponent(stopId)}`);
+};
+
+export const fetchMyNotifications = async (): Promise<ServiceAlert[]> => {
+  const response = await api.get<{ success: boolean; data: ServiceAlert[] }>('/alerts/notifications/me');
+  return response.data.data || [];
 };

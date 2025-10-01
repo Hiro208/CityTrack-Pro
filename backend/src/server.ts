@@ -6,6 +6,10 @@ import { env } from './config/env';
 import { query } from './config/database';
 import { MtaService } from './services/mtaService'; //  引入 Service
 import vehicleRoutes from './routes/vehicleRoutes'; //  引入路由
+import authRoutes from './routes/authRoutes';
+import favoriteRoutes from './routes/favoriteRoutes';
+import alertRoutes from './routes/alertRoutes';
+import { AlertService } from './services/alertService';
 
 const app = express();
 
@@ -15,6 +19,9 @@ app.use(cors());   // 跨域
 app.use(express.json()); // 解析 JSON
 app.use(morgan('dev'));  // 日志
 app.use('/api/vehicles', vehicleRoutes); //  注册车辆路由
+app.use('/api/auth', authRoutes);
+app.use('/api/favorites', favoriteRoutes);
+app.use('/api/alerts', alertRoutes);
 
 // --- 测试路由 ---
 app.get('/health', async (req, res) => {
@@ -51,6 +58,13 @@ const startServer = async () => {
     
     // 立即执行一次
     MtaService.fetchAndSaveAllFeeds();
+
+    // 服务告警抓取任务
+    console.log('🚨 初始化服务告警同步任务...');
+    setInterval(() => {
+      AlertService.fetchAndSaveAlerts();
+    }, 60000);
+    AlertService.fetchAndSaveAlerts();
 
   } catch (error) {
     // ...
