@@ -1,6 +1,15 @@
 // src/api/transitApi.ts
 import axios from 'axios';
-import type { FavoriteRoute, FavoriteStop, ServiceAlert, User, Vehicle } from '../types/transit';
+import type {
+  FavoriteRoute,
+  FavoriteStop,
+  NotificationItem,
+  NotificationSettings,
+  PushConfig,
+  ServiceAlert,
+  User,
+  Vehicle,
+} from '../types/transit';
 
 // 如果你的后端端口是 5001，请保持这个地址
 const API_BASE_URL = 'http://localhost:5001/api';
@@ -86,4 +95,45 @@ export const removeFavoriteStop = async (stopId: string): Promise<void> => {
 export const fetchMyNotifications = async (): Promise<ServiceAlert[]> => {
   const response = await api.get<{ success: boolean; data: ServiceAlert[] }>('/alerts/notifications/me');
   return response.data.data || [];
+};
+
+export const fetchNotificationCenter = async (onlyUnread = false): Promise<NotificationItem[]> => {
+  const response = await api.get<{ success: boolean; data: NotificationItem[] }>(
+    `/notifications${onlyUnread ? '?unread=1' : ''}`
+  );
+  return response.data.data || [];
+};
+
+export const markNotificationRead = async (id: number): Promise<void> => {
+  await api.patch(`/notifications/${id}/read`);
+};
+
+export const markAllNotificationsRead = async (): Promise<void> => {
+  await api.patch('/notifications/read-all');
+};
+
+export const fetchNotificationSettings = async (): Promise<NotificationSettings | null> => {
+  const response = await api.get<{ success: boolean; data: NotificationSettings | null }>('/notifications/settings');
+  return response.data.data;
+};
+
+export const updateNotificationSettings = async (settings: Partial<NotificationSettings>): Promise<NotificationSettings | null> => {
+  const response = await api.patch<{ success: boolean; data: NotificationSettings | null }>(
+    '/notifications/settings',
+    settings
+  );
+  return response.data.data;
+};
+
+export const fetchPushConfig = async (): Promise<PushConfig> => {
+  const response = await api.get<{ success: boolean; data: PushConfig }>('/notifications/push-config');
+  return response.data.data;
+};
+
+export const subscribePush = async (subscription: PushSubscription): Promise<void> => {
+  await api.post('/notifications/push-subscriptions', subscription);
+};
+
+export const unsubscribePush = async (endpoint: string): Promise<void> => {
+  await api.delete('/notifications/push-subscriptions', { data: { endpoint } });
 };

@@ -10,6 +10,7 @@ import authRoutes from './routes/authRoutes';
 import favoriteRoutes from './routes/favoriteRoutes';
 import alertRoutes from './routes/alertRoutes';
 import { AlertService } from './services/alertService';
+import notificationRoutes from './routes/notificationRoutes';
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use('/api/vehicles', vehicleRoutes); //  注册车辆路由
 app.use('/api/auth', authRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // --- 测试路由 ---
 app.get('/health', async (req, res) => {

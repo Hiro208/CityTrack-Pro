@@ -2,6 +2,8 @@ import axios from 'axios';
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { AlertRepository, ServiceAlertRow } from '../repositories/alertRepository';
 import { env } from '../config/env';
+import { NotificationRepository } from '../repositories/notificationRepository';
+import { NotificationDispatchService } from './notificationDispatchService';
 
 const ALERT_FEED_URL = 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys/all-alerts';
 
@@ -83,6 +85,8 @@ export class AlertService {
       }
 
       await AlertRepository.upsertBatch(parsed);
+      const newNotifications = await NotificationRepository.createFromAlerts();
+      await NotificationDispatchService.dispatchNewNotifications(newNotifications);
       console.log(`🚨 服务告警同步完成，共 ${parsed.length} 条`);
     } catch (e: any) {
       console.error('❌ 服务告警同步失败:', e.message);

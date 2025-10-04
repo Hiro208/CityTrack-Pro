@@ -61,6 +61,37 @@ const initDb = async () => {
     CREATE INDEX IF NOT EXISTS idx_favorite_routes_user ON favorite_routes(user_id);
     CREATE INDEX IF NOT EXISTS idx_favorite_stops_user ON favorite_stops(user_id);
     CREATE INDEX IF NOT EXISTS idx_service_alerts_updated ON service_alerts(updated_at DESC);
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_notifications_enabled BOOLEAN DEFAULT TRUE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS push_notifications_enabled BOOLEAN DEFAULT TRUE;
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      alert_id VARCHAR(255) NOT NULL REFERENCES service_alerts(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      body TEXT,
+      effect_text VARCHAR(100),
+      is_read BOOLEAN DEFAULT FALSE,
+      email_sent BOOLEAN DEFAULT FALSE,
+      webpush_sent BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      read_at TIMESTAMP,
+      UNIQUE (user_id, alert_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_alert ON notifications(alert_id);
+    CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
   `;
 
   try {

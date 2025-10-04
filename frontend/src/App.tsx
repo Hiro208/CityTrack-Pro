@@ -5,28 +5,32 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useVehicles } from './hooks/useVehicles';
 import ControlPanel from './components/ControlPanel';
 import VehiclePopup from './components/VehiclePopup';
-import type { ServiceAlert, User, Vehicle } from './types/transit';
+import type { FavoriteStop, NotificationItem, NotificationSettings, User, Vehicle } from './types/transit';
 import {
   addFavoriteRoute,
   addFavoriteStop,
   clearStoredToken,
   fetchFavorites,
   fetchMe,
-  fetchMyNotifications,
+  fetchNotificationCenter,
+  fetchNotificationSettings,
+  fetchPushConfig,
   getStoredToken,
   login,
+  markAllNotificationsRead,
+  markNotificationRead,
   register,
   removeFavoriteRoute,
   removeFavoriteStop,
+  subscribePush,
   setStoredToken,
+  updateNotificationSettings,
 } from './api/transitApi';
 
-// 引入 Mapbox 的默认样式表 (必须！)
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-// 初始化 React Query 客户端
 const queryClient = new QueryClient();
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN; // 从环境变量获取 Mapbox Token
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const extractStopCode = (stopName?: string): string => {
   if (!stopName) return '';
@@ -34,19 +38,37 @@ const extractStopCode = (stopName?: string): string => {
   return match ? match[1].toUpperCase() : stopName.trim().toUpperCase();
 };
 
-//为了代码整洁，我们将地图逻辑拆分为一个子组件
+const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+};
+
+type PopupInfo = { lng: number; lat: number; props: Vehicle };
+
 const TransitMap = () => {
   const [selectedRoute, setSelectedRoute] = useState('ALL');
-  const [hoverInfo, setHoverInfo] = useState<{ lng: number; lat: number; props: Vehicle } | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<PopupInfo | null>(null);
+  const [pinnedInfo, setPinnedInfo] = useState<PopupInfo | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authForm, setAuthForm] = useState({ email: '', password: '' });
   const [favoriteRoutes, setFavoriteRoutes] = useState<Set<string>>(new Set());
-  const [favoriteStops, setFavoriteStops] = useState<Set<string>>(new Set());
-  const [notifications, setNotifications] = useState<ServiceAlert[]>([]);
+  const [favoriteStops, setFavoriteStops] = useState<FavoriteStop[]>([]);
+  const [favoriteStopSet, setFavoriteStopSet] = useState<Set<string>>(new Set());
+  const [notificationCenter, setNotificationCenter] = useState<NotificationItem[]>([]);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
+  const [authError, setAuthError] = useState('');
   
-  // 核心：调用我们要自定义 Hook 获取数据
   const { geoJSON, count, layerColorExpression } = useVehicles(selectedRoute);
+
+  const unreadCount = useMemo(
+    () => notificationCenter.filter((n) => !n.is_read).length,
+    [notificationCenter]
+  );
 
   const refreshUserData = async () => {
     if (!getStoredToken()) return;
@@ -55,16 +77,19 @@ const TransitMap = () => {
       clearStoredToken();
       setUser(null);
       setFavoriteRoutes(new Set());
-      setFavoriteStops(new Set());
-      setNotifications([]);
+      setFavoriteStops([]);
+      setFavoriteStopSet(new Set());
+      setNotificationCenter([]);
+      setNotificationSettings(null);
       return;
     }
     setUser(me);
     const fav = await fetchFavorites();
     setFavoriteRoutes(new Set(fav.routes.map((r) => r.route_id.toUpperCase())));
-    setFavoriteStops(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
-    const myAlerts = await fetchMyNotifications();
-    setNotifications(myAlerts);
+    setFavoriteStops(fav.stops);
+    setFavoriteStopSet(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
+    setNotificationCenter(await fetchNotificationCenter());
+    setNotificationSettings(await fetchNotificationSettings());
   };
 
   useEffect(() => {
@@ -74,14 +99,14 @@ const TransitMap = () => {
   useEffect(() => {
     if (!user) return;
     const timer = window.setInterval(async () => {
-      const myAlerts = await fetchMyNotifications();
-      setNotifications(myAlerts);
+      setNotificationCenter(await fetchNotificationCenter());
     }, 30000);
     return () => window.clearInterval(timer);
   }, [user]);
 
   const handleSubmitAuth = async () => {
     try {
+      setAuthError('');
       if (!authForm.email || !authForm.password) return;
       const result = authMode === 'login'
         ? await login(authForm.email, authForm.password)
@@ -92,7 +117,7 @@ const TransitMap = () => {
       await refreshUserData();
     } catch (e) {
       console.error('Auth failed:', e);
-      alert(authMode === 'login' ? '登录失败，请检查账号密码' : '注册失败，可能邮箱已存在');
+      setAuthError(authMode === 'login' ? 'Login failed. Check your email/password.' : 'Registration failed. Email may already exist.');
     }
   };
 
@@ -100,8 +125,11 @@ const TransitMap = () => {
     clearStoredToken();
     setUser(null);
     setFavoriteRoutes(new Set());
-    setFavoriteStops(new Set());
-    setNotifications([]);
+    setFavoriteStops([]);
+    setFavoriteStopSet(new Set());
+    setNotificationCenter([]);
+    setNotificationSettings(null);
+    setAuthError('');
   };
 
   const handleToggleRouteFavorite = async (routeId: string) => {
@@ -115,8 +143,9 @@ const TransitMap = () => {
       }
       const fav = await fetchFavorites();
       setFavoriteRoutes(new Set(fav.routes.map((r) => r.route_id.toUpperCase())));
-      setFavoriteStops(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
-      setNotifications(await fetchMyNotifications());
+      setFavoriteStops(fav.stops);
+      setFavoriteStopSet(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
+      setNotificationCenter(await fetchNotificationCenter());
     } catch (e) {
       console.error('Toggle route favorite failed', e);
     }
@@ -126,32 +155,75 @@ const TransitMap = () => {
     if (!user) return;
     const stopId = extractStopCode(stopDisplayName);
     if (!stopId) return;
+    const wasFavorited = favoriteStopSet.has(stopId);
+    const optimisticSet = new Set(favoriteStopSet);
+    if (wasFavorited) optimisticSet.delete(stopId);
+    else optimisticSet.add(stopId);
+    setFavoriteStopSet(optimisticSet);
+
     try {
-      if (favoriteStops.has(stopId)) {
+      if (wasFavorited) {
         await removeFavoriteStop(stopId);
       } else {
         await addFavoriteStop(stopId, stopDisplayName);
       }
       const fav = await fetchFavorites();
       setFavoriteRoutes(new Set(fav.routes.map((r) => r.route_id.toUpperCase())));
-      setFavoriteStops(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
-      setNotifications(await fetchMyNotifications());
+      setFavoriteStops(fav.stops);
+      setFavoriteStopSet(new Set(fav.stops.map((s) => s.stop_id.toUpperCase())));
+      setNotificationCenter(await fetchNotificationCenter());
     } catch (e) {
       console.error('Toggle stop favorite failed', e);
+      // rollback optimistic update
+      setFavoriteStopSet(new Set(favoriteStopSet));
     }
   };
 
-  const hoveredStopId = useMemo(() => extractStopCode(hoverInfo?.props.stop_name), [hoverInfo]);
+  const handleEnableBrowserPush = async () => {
+    if (!user) return;
+    try {
+      const config = await fetchPushConfig();
+      if (!config.enabled || !config.publicKey) {
+        alert('Push is not configured on server yet.');
+        return;
+      }
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        alert('This browser does not support Push Notifications.');
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('Notification permission denied.');
+        return;
+      }
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      const existing = await registration.pushManager.getSubscription();
+      const subscription =
+        existing ||
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+        }));
+      await subscribePush(subscription as unknown as PushSubscription);
+      alert('Browser Push enabled.');
+    } catch (e) {
+      console.error('Enable push failed', e);
+      alert('Failed to enable browser push.');
+    }
+  };
+
+  const activePopup = pinnedInfo ?? hoverInfo;
+  const activeStopId = useMemo(() => extractStopCode(activePopup?.props.stop_name), [activePopup]);
 
   return (
     <div className="w-screen h-screen bg-black relative overflow-hidden">
       <Map
         initialViewState={{ latitude: 40.73, longitude: -73.98, zoom: 11 }}
-        mapStyle="mapbox://styles/mapbox/dark-v11" // 酷炫的深色模式
+        mapStyle="mapbox://styles/mapbox/dark-v11"
         mapboxAccessToken={MAPBOX_TOKEN}
-        interactiveLayerIds={['transit-point']} // 指定哪些层可以交互
+        interactiveLayerIds={['transit-point']}
         onMouseMove={(e) => {
-          // 鼠标悬停逻辑
+          if (pinnedInfo) return;
           const feature = e.features?.[0];
           if (feature) {
             setHoverInfo({ 
@@ -165,13 +237,28 @@ const TransitMap = () => {
             e.target.getCanvas().style.cursor = '';
           }
         }}
+        onClick={(e) => {
+          const target = e.originalEvent?.target as HTMLElement | null;
+          if (target?.closest('.mapboxgl-popup')) return;
+          const feature = e.features?.[0];
+          if (feature) {
+            const popupData = {
+              lng: e.lngLat.lng,
+              lat: e.lngLat.lat,
+              props: feature.properties as Vehicle,
+            };
+            setPinnedInfo(popupData);
+            setHoverInfo(popupData);
+          } else {
+            setPinnedInfo(null);
+            setHoverInfo(null);
+          }
+        }}
       >
         <NavigationControl position="top-right" />
         <GeolocateControl position="top-right" />
 
-        {/* 数据源：车辆 GeoJSON */}
         <Source id="vehicles-source" type="geojson" data={geoJSON}>
-          {/* 图层 1: 光晕效果 (Glow) - 让点看起来在发光 */}
           <Layer
             id="transit-glow"
             type="circle"
@@ -189,14 +276,13 @@ const TransitMap = () => {
                 14,
                 38
               ],
-              'circle-color': layerColorExpression as any, // 动态颜色
+              'circle-color': layerColorExpression as any,
               'circle-opacity': 0.34,
               'circle-blur': 0.9
             }}
             beforeId="transit-point"
           />
           
-          {/* 图层 2: 实体点 (Core) */}
           <Layer
             id="transit-point"
             type="circle"
@@ -210,22 +296,25 @@ const TransitMap = () => {
           />
         </Source>
         
-
-        {/* 弹窗逻辑 */}
-        {hoverInfo && (
+        {activePopup && (
           <Popup
-            longitude={hoverInfo.lng}
-            latitude={hoverInfo.lat}
-            closeButton={false}
+            longitude={activePopup.lng}
+            latitude={activePopup.lat}
+            closeButton={!!pinnedInfo}
+            closeOnClick={false}
             offset={15}
             maxWidth="320px"
-            className="transit-popup" // 样式在 index.css 定义
+            className="transit-popup"
+            onClose={() => setPinnedInfo(null)}
           >
             <VehiclePopup
-              info={hoverInfo}
+              info={activePopup}
               canFavoriteStop={!!user}
-              isStopFavorited={hoveredStopId ? favoriteStops.has(hoveredStopId) : false}
+              isStopFavorited={activeStopId ? favoriteStopSet.has(activeStopId) : false}
               onToggleFavoriteStop={handleToggleStopFavorite}
+              onPinPopup={() => {
+                if (!pinnedInfo && activePopup) setPinnedInfo(activePopup);
+              }}
             />
           </Popup>
         )}
@@ -244,14 +333,36 @@ const TransitMap = () => {
         onSubmitAuth={handleSubmitAuth}
         onLogout={handleLogout}
         favoriteRoutes={favoriteRoutes}
+        favoriteStops={favoriteStops}
         onToggleRouteFavorite={handleToggleRouteFavorite}
-        notifications={notifications}
+        notificationCenter={notificationCenter}
+        notificationSettings={notificationSettings}
+        onToggleEmailNotifications={(enabled) =>
+          updateNotificationSettings({ email_notifications_enabled: enabled }).then(setNotificationSettings)
+        }
+        onTogglePushNotifications={(enabled) =>
+          updateNotificationSettings({ push_notifications_enabled: enabled }).then(setNotificationSettings)
+        }
+        onEnableBrowserPush={handleEnableBrowserPush}
+        onMarkNotificationRead={async (id) => {
+          await markNotificationRead(id);
+          setNotificationCenter(await fetchNotificationCenter());
+        }}
+        onMarkAllNotificationsRead={async () => {
+          await markAllNotificationsRead();
+          setNotificationCenter(await fetchNotificationCenter());
+        }}
+        unreadCount={unreadCount}
       />
+      {authError ? (
+        <div className="absolute bottom-5 left-5 z-20 px-3 py-2 rounded-lg bg-red-600/90 text-white text-xs shadow-lg">
+          {authError}
+        </div>
+      ) : null}
     </div>
   );
 };
 
-// 主入口：包裹 QueryProvider
 function App() {
   return (
     <QueryClientProvider client={queryClient}>

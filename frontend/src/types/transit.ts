@@ -40,6 +40,30 @@ export interface ServiceAlert {
   updated_at: number;
 }
 
+export interface NotificationItem {
+  id: number;
+  user_id: number;
+  alert_id: string;
+  title: string;
+  body?: string | null;
+  effect_text?: string | null;
+  is_read: boolean;
+  email_sent: boolean;
+  webpush_sent: boolean;
+  created_at: string;
+  read_at?: string | null;
+}
+
+export interface NotificationSettings {
+  email_notifications_enabled: boolean;
+  push_notifications_enabled: boolean;
+}
+
+export interface PushConfig {
+  enabled: boolean;
+  publicKey: string;
+}
+
 // 终点站字典的结构定义
 export interface TerminalInfo {
   term: string; // 终点站名称

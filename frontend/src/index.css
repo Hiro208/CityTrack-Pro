@@ -10,6 +10,34 @@ body {
   overflow: hidden; /* 防止滚动条出现 */
 }
 
+/* --- Theme Scrollbar (Dark + Neon Green) --- */
+* {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #3d4f45 #111317; /* thumb track */
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #111317;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #31453a 0%, #25362d 100%);
+  border: 1px solid rgba(47, 208, 122, 0.3);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #3a5a4b 0%, #2b473a 100%);
+  border-color: rgba(47, 208, 122, 0.55);
+}
+
 /* --- Mapbox Popup 自定义样式 (磨砂玻璃效果) --- */
 .mapboxgl-popup-content {
   background: rgba(15, 15, 15, 0.85) !important; /* 深色半透明背景 */

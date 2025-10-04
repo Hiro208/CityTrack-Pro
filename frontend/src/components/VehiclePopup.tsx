@@ -2,14 +2,14 @@
 import React from 'react';
 import type { Vehicle } from '../types/transit';
 import { ROUTE_COLORS, TERMINAL_MAP } from '../config/constants';
-import { MapPin, Navigation } from 'lucide-react'; // 漂亮的图标库
+import { MapPin, Navigation } from 'lucide-react';
 
 interface Props {
-  // 这里的 info 结构要匹配 react-map-gl 的事件返回
   info: { lng: number; lat: number; props: Vehicle };
   canFavoriteStop?: boolean;
   isStopFavorited?: boolean;
   onToggleFavoriteStop?: (stopName: string) => void;
+  onPinPopup?: () => void;
 }
 
 const formatStatus = (status?: string): string => {
@@ -40,20 +40,27 @@ const extractStopCode = (stopName?: string): string => {
   return match ? match[1].toUpperCase() : stopName.trim().toUpperCase();
 };
 
-const VehiclePopup: React.FC<Props> = ({ info, canFavoriteStop, isStopFavorited, onToggleFavoriteStop }) => {
+const VehiclePopup: React.FC<Props> = ({
+  info,
+  canFavoriteStop,
+  isStopFavorited,
+  onToggleFavoriteStop,
+  onPinPopup,
+}) => {
   const { props: v } = info;
   const color = ROUTE_COLORS[v.route_id] || '#808183';
   
-  // 智能解析方向 (如果在字典里找不到，就用 N/S)
   const termData = TERMINAL_MAP[v.route_id]?.[v.direction];
   const directionText = termData?.dir || formatDirection(v.direction);
   
-  // 优先显示 API 返回的 destination，如果没有则查字典
   const destinationText = v.destination || termData?.term || "Unknown Terminal";
 
   return (
-    <div className="min-w-[240px] text-white">
-      {/* 头部：线路 Logo 和状态 */}
+    <div
+      className="min-w-[240px] text-white"
+      onMouseDown={() => onPinPopup?.()}
+      onMouseEnter={() => onPinPopup?.()}
+    >
       <div className="flex items-center justify-between mb-3">
         <div 
           className="w-10 h-10 rounded-full flex items-center justify-center text-xl font-black shadow-lg border-2 border-white/20"
@@ -72,7 +79,6 @@ const VehiclePopup: React.FC<Props> = ({ info, canFavoriteStop, isStopFavorited,
         </div>
       </div>
 
-      {/* 中部：终点站信息 */}
       <div className="mb-3 border-b border-white/10 pb-2">
         <div className="flex items-center gap-1 text-[10px] text-gray-500 uppercase mb-1 font-semibold">
           <Navigation size={10} /> Bound For
@@ -82,7 +88,6 @@ const VehiclePopup: React.FC<Props> = ({ info, canFavoriteStop, isStopFavorited,
         </div>
       </div>
 
-      {/* 底部：当前位置 */}
       <div className="bg-white/5 rounded-lg p-2 border border-white/5 backdrop-blur-sm">
         <div className="flex items-center justify-between gap-1 text-[10px] text-gray-400 mb-1">
           <div className="flex items-center gap-1">
@@ -95,7 +100,7 @@ const VehiclePopup: React.FC<Props> = ({ info, canFavoriteStop, isStopFavorited,
             className={`text-sm leading-none ${
               isStopFavorited ? 'text-yellow-300' : 'text-gray-500'
             } ${!canFavoriteStop ? 'opacity-40 cursor-not-allowed' : ''}`}
-            title={!canFavoriteStop ? '登录后可收藏站点' : `收藏站点 ${extractStopCode(v.stop_name)}`}
+            title={!canFavoriteStop ? 'Login required to favorite stops' : `Favorite stop ${extractStopCode(v.stop_name)}`}
           >
             ★
           </button>

@@ -21,6 +21,14 @@ const envSchema = z.object({
   REDIS_PORT: z.string().default('6379').transform((val) => parseInt(val, 10)),
   JWT_SECRET: z.string().default('change-me-in-production'),
   MTA_API_KEY: z.string().optional(),
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default('mailto:admin@example.com'),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional().transform((val) => (val ? parseInt(val, 10) : undefined)),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
 });
 
 // 解析并导出
