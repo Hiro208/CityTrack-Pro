@@ -5,7 +5,6 @@ import type {
   FavoriteStop,
   NotificationItem,
   NotificationSettings,
-  PushConfig,
   ServiceAlert,
   User,
   Vehicle,
@@ -123,17 +122,4 @@ export const updateNotificationSettings = async (settings: Partial<NotificationS
     settings
   );
   return response.data.data;
-};
-
-export const fetchPushConfig = async (): Promise<PushConfig> => {
-  const response = await api.get<{ success: boolean; data: PushConfig }>('/notifications/push-config');
-  return response.data.data;
-};
-
-export const subscribePush = async (subscription: PushSubscription): Promise<void> => {
-  await api.post('/notifications/push-subscriptions', subscription);
-};
-
-export const unsubscribePush = async (endpoint: string): Promise<void> => {
-  await api.delete('/notifications/push-subscriptions', { data: { endpoint } });
 };

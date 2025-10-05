@@ -1,11 +1,10 @@
 import axios from 'axios';
-import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
 import { AlertRepository, ServiceAlertRow } from '../repositories/alertRepository';
-import { env } from '../config/env';
 import { NotificationRepository } from '../repositories/notificationRepository';
 import { NotificationDispatchService } from './notificationDispatchService';
 
-const ALERT_FEED_URL = 'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys/all-alerts';
+const ALERT_FEED_URL =
+  'https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/camsys%2Fsubway-alerts.json';
 
 const EFFECT_MAP: Record<number, string> = {
   1: 'NO_SERVICE',
@@ -40,36 +39,70 @@ export class AlertService {
   static async fetchAndSaveAlerts() {
     try {
       const response = await axios.get(ALERT_FEED_URL, {
-        responseType: 'arraybuffer',
-        headers: {
-          Accept: 'application/x-protobuf',
-          ...(env.MTA_API_KEY ? { 'x-api-key': env.MTA_API_KEY } : {}),
-        },
         timeout: 10000,
       });
 
-      const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
-        new Uint8Array(response.data)
-      );
+      const feed = response.data as {
+        entity?: Array<{
+          id?: string;
+          alert?: {
+            informed_entity?: Array<{
+              route_id?: string;
+              routeId?: string;
+              stop_id?: string;
+              stopId?: string;
+            }>;
+            informedEntity?: Array<{
+              route_id?: string;
+              routeId?: string;
+              stop_id?: string;
+              stopId?: string;
+            }>;
+            header_text?: { translation?: Array<{ text?: string }> };
+            description_text?: { translation?: Array<{ text?: string }> };
+            headerText?: { translation?: Array<{ text?: string }> };
+            descriptionText?: { translation?: Array<{ text?: string }> };
+            effect?: number;
+            cause?: number;
+            'transit_realtime.mercury_alert'?: {
+              alert_type?: string;
+            };
+          };
+        }>;
+      };
 
       const parsed: ServiceAlertRow[] = [];
       const now = Math.floor(Date.now() / 1000);
 
-      for (const entity of feed.entity) {
+      for (const entity of feed.entity || []) {
         if (!entity.alert || !entity.id) continue;
         const alert = entity.alert;
-        const informed = alert.informedEntity || [];
+        const informed = alert.informed_entity || alert.informedEntity || [];
 
         const routeIds = Array.from(
-          new Set(informed.map((i: any) => String(i.routeId || '').toUpperCase()).filter(Boolean))
+          new Set(
+            informed
+              .map((i) => String(i.route_id || i.routeId || '').toUpperCase())
+              .filter(Boolean)
+          )
         );
         const stopIds = Array.from(
-          new Set(informed.map((i: any) => String(i.stopId || '').toUpperCase()).filter(Boolean))
+          new Set(
+            informed
+              .map((i) => String(i.stop_id || i.stopId || '').toUpperCase())
+              .filter(Boolean)
+          )
         );
 
-        const header = alert.headerText?.translation?.[0]?.text || null;
-        const description = alert.descriptionText?.translation?.[0]?.text || null;
-        const effect = alert.effect != null ? (EFFECT_MAP[Number(alert.effect)] || String(alert.effect)) : null;
+        const header =
+          alert.header_text?.translation?.[0]?.text || alert.headerText?.translation?.[0]?.text || null;
+        const description =
+          alert.description_text?.translation?.[0]?.text ||
+          alert.descriptionText?.translation?.[0]?.text ||
+          null;
+        const effect =
+          alert['transit_realtime.mercury_alert']?.alert_type ||
+          (alert.effect != null ? EFFECT_MAP[Number(alert.effect)] || String(alert.effect) : null);
         const cause = alert.cause != null ? (CAUSE_MAP[Number(alert.cause)] || String(alert.cause)) : null;
 
         parsed.push({

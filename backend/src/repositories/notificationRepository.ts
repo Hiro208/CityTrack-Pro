@@ -7,11 +7,11 @@ export class NotificationRepository {
       WITH matches AS (
         SELECT DISTINCT fr.user_id, a.id AS alert_id
         FROM service_alerts a
-        JOIN favorite_routes fr ON a.route_ids && ARRAY[fr.route_id]
+        JOIN favorite_routes fr ON a.route_ids && ARRAY[fr.route_id::text]
         UNION
         SELECT DISTINCT fs.user_id, a.id AS alert_id
         FROM service_alerts a
-        JOIN favorite_stops fs ON a.stop_ids && ARRAY[fs.stop_id]
+        JOIN favorite_stops fs ON a.stop_ids && ARRAY[fs.stop_id::text]
       ),
       inserted AS (
         INSERT INTO notifications (user_id, alert_id, title, body, effect_text)
