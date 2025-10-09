@@ -6,6 +6,7 @@ import { useVehicles } from './hooks/useVehicles';
 import ControlPanel from './components/ControlPanel';
 import VehiclePopup from './components/VehiclePopup';
 import type { FavoriteStop, NotificationItem, NotificationSettings, User, Vehicle } from './types/transit';
+import { createTranslator, type Language } from './i18n';
 import {
   addFavoriteRoute,
   addFavoriteStop,
@@ -51,8 +52,13 @@ const TransitMap = () => {
   const [notificationCenter, setNotificationCenter] = useState<NotificationItem[]>([]);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
   const [authError, setAuthError] = useState('');
+  const [language, setLanguage] = useState<Language>(() => {
+    const saved = localStorage.getItem('ui_language');
+    return saved === 'zh' || saved === 'es' || saved === 'en' ? saved : 'en';
+  });
   
   const { geoJSON, count, layerColorExpression } = useVehicles(selectedRoute);
+  const t = useMemo(() => createTranslator(language), [language]);
 
   const unreadCount = useMemo(
     () => notificationCenter.filter((n) => !n.is_read).length,
@@ -86,6 +92,10 @@ const TransitMap = () => {
   }, []);
 
   useEffect(() => {
+    localStorage.setItem('ui_language', language);
+  }, [language]);
+
+  useEffect(() => {
     if (!user) return;
     const timer = window.setInterval(async () => {
       setNotificationCenter(await fetchNotificationCenter());
@@ -106,7 +116,7 @@ const TransitMap = () => {
       await refreshUserData();
     } catch (e) {
       console.error('Auth failed:', e);
-      setAuthError(authMode === 'login' ? 'Login failed. Check your email/password.' : 'Registration failed. Email may already exist.');
+      setAuthError(authMode === 'login' ? t('loginFailed') : t('registerFailed'));
     }
   };
 
@@ -265,6 +275,7 @@ const TransitMap = () => {
           >
             <VehiclePopup
               info={activePopup}
+              t={t}
               canFavoriteStop={!!user}
               isStopFavorited={activeStopId ? favoriteStopSet.has(activeStopId) : false}
               onToggleFavoriteStop={handleToggleStopFavorite}
@@ -281,6 +292,9 @@ const TransitMap = () => {
         selectedRoute={selectedRoute} 
         onSelectRoute={setSelectedRoute} 
         count={count}
+        language={language}
+        onLanguageChange={setLanguage}
+        t={t}
         user={user}
         authMode={authMode}
         authForm={authForm}
