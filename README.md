@@ -47,7 +47,8 @@ This project focuses on real engineering challenges:
 │  │  └─ i18n.ts
 │  └─ package.json
 └─ docs/
-   └─ architecture.md       # system architecture diagram
+   ├─ architecture.md       # system architecture diagram
+   └─ api.md                # API contract documentation
 ```
 
 ## Quick Start
@@ -66,7 +67,13 @@ cd backend
 npm install
 ```
 
-Create `backend/.env` (example values):
+Create `backend/.env` from template:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Then edit `backend/.env` values:
 
 ```env
 PORT=5001
@@ -110,7 +117,13 @@ cd frontend
 npm install
 ```
 
-Create `frontend/.env`:
+Create `frontend/.env` from template:
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+Then edit `frontend/.env`:
 
 ```env
 VITE_MAPBOX_TOKEN=your_mapbox_token
@@ -166,6 +179,18 @@ Backend default URL: `http://localhost:5001`
 ## Architecture
 
 See `docs/architecture.md` for the full architecture diagram and flow details.
+
+## API Docs
+
+See `docs/api.md` for endpoint-level request/response contracts.
+
+## Environment Variable Guide
+
+See `backend/.env.required.md` for:
+- required vs optional variables
+- defaults and examples
+- common startup errors and fixes
+- security checklist and SMTP credential rotation steps
 
 ## Interview Positioning (Suggested)
 

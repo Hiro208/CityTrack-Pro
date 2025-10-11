@@ -3,6 +3,11 @@ node_modules/
 
 # 环境变量 (🔥 绝对不能上传，包含密码！)
 .env
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
 
 # 编译输出目录
 dist/
