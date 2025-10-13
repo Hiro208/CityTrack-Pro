@@ -8,6 +8,15 @@ interface Props {
   selectedRoute: string;
   onSelectRoute: (route: string) => void;
   count: number;
+  timeRange: '15m' | '1h' | '6h' | '24h';
+  compareMode: 'none' | 'previous';
+  onTimeRangeChange: (range: '15m' | '1h' | '6h' | '24h') => void;
+  onCompareModeChange: (mode: 'none' | 'previous') => void;
+  trendPoints: number[];
+  averageCount: number;
+  comparisonDelta: number | null;
+  comparisonPercent: number | null;
+  topRoutes: Array<{ routeId: string; vehicleCount: number }>;
   language: Language;
   onLanguageChange: (language: Language) => void;
   t: TranslateFn;
@@ -33,6 +42,15 @@ const ControlPanel: React.FC<Props> = ({
   selectedRoute,
   onSelectRoute,
   count,
+  timeRange,
+  compareMode,
+  onTimeRangeChange,
+  onCompareModeChange,
+  trendPoints,
+  averageCount,
+  comparisonDelta,
+  comparisonPercent,
+  topRoutes,
   language,
   onLanguageChange,
   t,
@@ -57,6 +75,18 @@ const ControlPanel: React.FC<Props> = ({
 
   const closeNotificationModal = () => setSelectedNotification(null);
   const sectionClass = 'mt-4 rounded-2xl border border-green-500/35 bg-black/35 p-4';
+  const chartPoints = trendPoints.length > 1 ? trendPoints : [count, count];
+  const minPoint = Math.min(...chartPoints);
+  const maxPoint = Math.max(...chartPoints);
+  const pointRange = Math.max(maxPoint - minPoint, 1);
+  const sparklinePath = chartPoints
+    .map((point, idx) => {
+      const x = (idx / (chartPoints.length - 1 || 1)) * 100;
+      const y = 100 - ((point - minPoint) / pointRange) * 100;
+      return `${x},${y}`;
+    })
+    .join(' ');
+  const maxRouteCount = topRoutes.length > 0 ? Math.max(...topRoutes.map((r) => r.vehicleCount)) : 1;
 
   return (
     <>
@@ -110,8 +140,8 @@ const ControlPanel: React.FC<Props> = ({
         <div className="mt-4 rounded-2xl border border-green-500/30 bg-gradient-to-r from-green-500/18 via-green-500/10 to-transparent p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-5xl font-extrabold leading-none text-green-400">{count}</div>
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-green-200/80">
+              <div className="text-5xl font-extrabold leading-none text-white">{count}</div>
+              <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/80">
                 {t('activeVehicles')}
               </div>
             </div>
@@ -120,10 +150,94 @@ const ControlPanel: React.FC<Props> = ({
         </div>
 
         <div className={sectionClass}>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-sm font-semibold text-white">{t('insightWindow')}</div>
+            <div className="text-[11px] text-gray-400">{t('windowAvg')}: {averageCount}</div>
+          </div>
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <select
+              value={timeRange}
+              onChange={(e) => onTimeRangeChange(e.target.value as '15m' | '1h' | '6h' | '24h')}
+              className="rounded-lg border border-green-500/35 bg-black/35 px-2 py-1.5 text-xs text-white outline-none focus:border-green-400/80"
+            >
+              <option value="15m">{t('range15m')}</option>
+              <option value="1h">{t('range1h')}</option>
+              <option value="6h">{t('range6h')}</option>
+              <option value="24h">{t('range24h')}</option>
+            </select>
+            <select
+              value={compareMode}
+              onChange={(e) => onCompareModeChange(e.target.value as 'none' | 'previous')}
+              className="rounded-lg border border-green-500/35 bg-black/35 px-2 py-1.5 text-xs text-white outline-none focus:border-green-400/80"
+            >
+              <option value="none">{t('compareNone')}</option>
+              <option value="previous">{t('comparePrevious')}</option>
+            </select>
+          </div>
+
+          <div className="h-16 rounded-lg border border-green-500/20 bg-black/30 p-2">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full">
+              <defs>
+                <linearGradient id="trendStroke" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="rgba(34,197,94,0.4)" />
+                  <stop offset="100%" stopColor="rgba(74,222,128,1)" />
+                </linearGradient>
+              </defs>
+              <polyline
+                fill="none"
+                stroke="url(#trendStroke)"
+                strokeWidth="3"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={sparklinePath}
+              />
+            </svg>
+          </div>
+
+          <div className="mt-2 text-xs">
+            {comparisonDelta == null ? (
+              <span className="text-gray-400">{t('noComparisonData')}</span>
+            ) : (
+              <span className={comparisonDelta >= 0 ? 'text-green-300' : 'text-red-300'}>
+                {comparisonDelta >= 0 ? '+' : ''}
+                {comparisonDelta}{' '}
+                {t('vsPrevious')}
+                {comparisonPercent != null ? ` (${comparisonPercent >= 0 ? '+' : ''}${comparisonPercent}%)` : ''}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3 border-t border-green-500/20 pt-3">
+            <div className="mb-2 text-[11px] uppercase tracking-wide text-gray-300">{t('topActiveRoutes')}</div>
+            {topRoutes.length > 0 ? (
+              <div className="space-y-1.5">
+                {topRoutes.map((route) => {
+                  const width = Math.max((route.vehicleCount / maxRouteCount) * 100, 8);
+                  return (
+                    <div key={route.routeId} className="flex items-center gap-2 text-xs">
+                      <span className="w-5 font-semibold text-green-300">{route.routeId}</span>
+                      <div className="h-2 flex-1 rounded-full bg-black/50">
+                        <div
+                          className="h-2 rounded-full bg-gradient-to-r from-green-500/55 to-green-300/80"
+                          style={{ width: `${width}%` }}
+                        />
+                      </div>
+                      <span className="w-6 text-right text-gray-300">{route.vehicleCount}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500">{t('noRouteData')}</div>
+            )}
+          </div>
+        </div>
+
+        <div className={sectionClass}>
           {user ? (
             <div>
-              <div className="text-sm font-semibold text-green-300">
-                {t('signedInAs')}: <span className="text-green-400">{user.email}</span>
+              <div className="text-sm font-semibold text-white">
+                {t('signedInAs')}: <span className="text-white">{user.email}</span>
               </div>
               <button
                 type="button"
