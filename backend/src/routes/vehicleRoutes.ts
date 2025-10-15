@@ -3,6 +3,7 @@ import { VehicleController } from '../controllers/vehicleController';
 
 const router = Router();
 
+router.get('/insights', VehicleController.getVehicleInsights);
 router.get('/', VehicleController.getAllVehicles);
 
 export default router;

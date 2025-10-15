@@ -24,6 +24,17 @@ const initDb = async () => {
     
     CREATE INDEX IF NOT EXISTS idx_vehicle_timestamp ON vehicle_positions(timestamp);
 
+    CREATE TABLE IF NOT EXISTS vehicle_metrics_snapshots (
+      snapshot_ts BIGINT NOT NULL,
+      route_id VARCHAR(50) NOT NULL,
+      vehicle_count INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (snapshot_ts, route_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vehicle_metrics_route_ts
+      ON vehicle_metrics_snapshots(route_id, snapshot_ts DESC);
+
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       email VARCHAR(255) UNIQUE NOT NULL,

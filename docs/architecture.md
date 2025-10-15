@@ -30,6 +30,7 @@ flowchart LR
     subgraph Data["Data Layer"]
         PG[("PostgreSQL
         vehicle_positions
+        vehicle_metrics_snapshots
         users
         favorite_routes
         favorite_stops
@@ -60,7 +61,14 @@ flowchart LR
 2. Parse `vehicle` entities when GPS exists.
 3. Fallback: parse `tripUpdate` and map `stop_id -> lat/lon` from stop data.
 4. Persist/upsert into `vehicle_positions`.
-5. Frontend reads from `GET /api/vehicles`.
+5. Write per-route metric snapshots into `vehicle_metrics_snapshots`.
+6. Frontend reads from `GET /api/vehicles`.
+
+### 1.1) Time-window analytics flow
+1. Frontend requests `GET /api/vehicles/insights` with `route/range/compare`.
+2. Backend queries `vehicle_metrics_snapshots` for current window series.
+3. Backend computes current average, previous-window average, delta, and top routes.
+4. UI renders sparkline + comparison badge + route ranking bars.
 
 ### 2) Alert ingestion (every 60s)
 1. `AlertService.fetchAndSaveAlerts()` pulls MTA alerts JSON.

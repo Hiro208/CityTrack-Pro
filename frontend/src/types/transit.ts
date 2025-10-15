@@ -59,6 +59,28 @@ export interface NotificationSettings {
   push_notifications_enabled: boolean;
 }
 
+export interface VehicleInsightPoint {
+  ts: number;
+  count: number;
+}
+
+export interface VehicleInsightTopRoute {
+  route_id: string;
+  vehicle_count: number;
+}
+
+export interface VehicleInsights {
+  range: '15m' | '1h' | '6h' | '24h';
+  compare: 'none' | 'previous';
+  route: string;
+  series: VehicleInsightPoint[];
+  current_avg: number;
+  previous_avg: number | null;
+  delta: number | null;
+  delta_percent: number | null;
+  top_routes: VehicleInsightTopRoute[];
+}
+
 export interface PushConfig {
   enabled: boolean;
   publicKey: string;

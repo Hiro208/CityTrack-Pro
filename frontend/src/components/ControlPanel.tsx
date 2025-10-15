@@ -4,6 +4,67 @@ import { ROUTE_COLORS } from '../config/constants';
 import type { FavoriteStop, NotificationItem, NotificationSettings, User } from '../types/transit';
 import type { Language, TranslateFn } from '../i18n';
 
+interface DropdownOption {
+  value: string;
+  label: string;
+}
+
+const StyledDropdown: React.FC<{
+  value: string;
+  options: DropdownOption[];
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  onOpenChange?: (open: boolean) => void;
+}> = ({ value, options, onChange, ariaLabel, onOpenChange }) => {
+  const [open, setOpen] = React.useState(false);
+  const selected = options.find((o) => o.value === value) || options[0];
+  React.useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
+
+  return (
+    <div
+      className="relative"
+      tabIndex={0}
+      onBlur={(e) => {
+        const next = e.relatedTarget as Node | null;
+        if (!next || !e.currentTarget.contains(next)) setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        className="flex w-full items-center justify-between rounded-lg border border-green-500/35 bg-black/35 px-2 py-1.5 text-xs text-white outline-none transition hover:bg-black/45 focus:border-green-400/80"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={ariaLabel}
+      >
+        <span>{selected?.label}</span>
+        <span className={`ml-2 text-[10px] text-green-300 transition ${open ? 'rotate-180' : ''}`}>▼</span>
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-[calc(100%+6px)] z-30 w-full overflow-hidden rounded-lg border border-green-500/35 bg-[rgba(10,10,10,0.98)] shadow-[0_12px_28px_rgba(0,0,0,0.55)]">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              className={`block w-full px-2 py-2 text-left text-xs transition ${
+                opt.value === value
+                  ? 'bg-green-500/18 text-green-200'
+                  : 'text-gray-200 hover:bg-green-500/10 hover:text-green-100'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 interface Props {
   selectedRoute: string;
   onSelectRoute: (route: string) => void;
@@ -72,9 +133,14 @@ const ControlPanel: React.FC<Props> = ({
   unreadCount,
 }) => {
   const [selectedNotification, setSelectedNotification] = React.useState<NotificationItem | null>(null);
+  const [insightDropdownOpen, setInsightDropdownOpen] = React.useState({
+    range: false,
+    compare: false,
+  });
 
   const closeNotificationModal = () => setSelectedNotification(null);
   const sectionClass = 'mt-4 rounded-2xl border border-green-500/35 bg-black/35 p-4';
+  const isInsightOpen = insightDropdownOpen.range || insightDropdownOpen.compare;
   const chartPoints = trendPoints.length > 1 ? trendPoints : [count, count];
   const minPoint = Math.min(...chartPoints);
   const maxPoint = Math.max(...chartPoints);
@@ -82,7 +148,8 @@ const ControlPanel: React.FC<Props> = ({
   const sparklinePath = chartPoints
     .map((point, idx) => {
       const x = (idx / (chartPoints.length - 1 || 1)) * 100;
-      const y = 100 - ((point - minPoint) / pointRange) * 100;
+      // Keep top/bottom padding so flat trends remain visible.
+      const y = 90 - ((point - minPoint) / pointRange) * 80;
       return `${x},${y}`;
     })
     .join(' ');
@@ -149,30 +216,44 @@ const ControlPanel: React.FC<Props> = ({
           </div>
         </div>
 
-        <div className={sectionClass}>
+        <div
+          className={`${sectionClass} transition ${
+            isInsightOpen
+              ? 'border-green-400/70 shadow-[0_0_18px_rgba(34,197,94,0.2)]'
+              : ''
+          }`}
+        >
           <div className="mb-3 flex items-center justify-between">
             <div className="text-sm font-semibold text-white">{t('insightWindow')}</div>
             <div className="text-[11px] text-gray-400">{t('windowAvg')}: {averageCount}</div>
           </div>
           <div className="mb-3 grid grid-cols-2 gap-2">
-            <select
+            <StyledDropdown
               value={timeRange}
-              onChange={(e) => onTimeRangeChange(e.target.value as '15m' | '1h' | '6h' | '24h')}
-              className="rounded-lg border border-green-500/35 bg-black/35 px-2 py-1.5 text-xs text-white outline-none focus:border-green-400/80"
-            >
-              <option value="15m">{t('range15m')}</option>
-              <option value="1h">{t('range1h')}</option>
-              <option value="6h">{t('range6h')}</option>
-              <option value="24h">{t('range24h')}</option>
-            </select>
-            <select
+              onChange={(value) => onTimeRangeChange(value as '15m' | '1h' | '6h' | '24h')}
+              ariaLabel={t('insightWindow')}
+              onOpenChange={(open) =>
+                setInsightDropdownOpen((prev) => ({ ...prev, range: open }))
+              }
+              options={[
+                { value: '15m', label: t('range15m') },
+                { value: '1h', label: t('range1h') },
+                { value: '6h', label: t('range6h') },
+                { value: '24h', label: t('range24h') },
+              ]}
+            />
+            <StyledDropdown
               value={compareMode}
-              onChange={(e) => onCompareModeChange(e.target.value as 'none' | 'previous')}
-              className="rounded-lg border border-green-500/35 bg-black/35 px-2 py-1.5 text-xs text-white outline-none focus:border-green-400/80"
-            >
-              <option value="none">{t('compareNone')}</option>
-              <option value="previous">{t('comparePrevious')}</option>
-            </select>
+              onChange={(value) => onCompareModeChange(value as 'none' | 'previous')}
+              ariaLabel={t('comparePrevious')}
+              onOpenChange={(open) =>
+                setInsightDropdownOpen((prev) => ({ ...prev, compare: open }))
+              }
+              options={[
+                { value: 'none', label: t('compareNone') },
+                { value: 'previous', label: t('comparePrevious') },
+              ]}
+            />
           </div>
 
           <div className="h-16 rounded-lg border border-green-500/20 bg-black/30 p-2">

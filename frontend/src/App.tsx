@@ -1,11 +1,18 @@
 // src/App.tsx
 import { useEffect, useMemo, useState } from 'react';
 import Map, { Source, Layer, NavigationControl, Popup, GeolocateControl } from 'react-map-gl';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useVehicles } from './hooks/useVehicles';
 import ControlPanel from './components/ControlPanel';
 import VehiclePopup from './components/VehiclePopup';
-import type { FavoriteStop, NotificationItem, NotificationSettings, User, Vehicle } from './types/transit';
+import type {
+  FavoriteStop,
+  NotificationItem,
+  NotificationSettings,
+  User,
+  Vehicle,
+  VehicleInsights,
+} from './types/transit';
 import { createTranslator, type Language } from './i18n';
 import {
   addFavoriteRoute,
@@ -15,6 +22,7 @@ import {
   fetchMe,
   fetchNotificationCenter,
   fetchNotificationSettings,
+  fetchVehicleInsights,
   getStoredToken,
   login,
   markAllNotificationsRead,
@@ -40,11 +48,6 @@ const extractStopCode = (stopName?: string): string => {
 type PopupInfo = { lng: number; lat: number; props: Vehicle };
 type TimeRange = '15m' | '1h' | '6h' | '24h';
 type CompareMode = 'none' | 'previous';
-type VehicleSnapshot = {
-  ts: number;
-  total: number;
-  routeCounts: Record<string, number>;
-};
 
 const TransitMap = () => {
   const [selectedRoute, setSelectedRoute] = useState('ALL');
@@ -61,7 +64,6 @@ const TransitMap = () => {
   const [authError, setAuthError] = useState('');
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
   const [compareMode, setCompareMode] = useState<CompareMode>('previous');
-  const [history, setHistory] = useState<VehicleSnapshot[]>([]);
   const [language, setLanguage] = useState<Language>(() => {
     const saved = localStorage.getItem('ui_language');
     return saved === 'zh' || saved === 'es' || saved === 'en' ? saved : 'en';
@@ -69,12 +71,46 @@ const TransitMap = () => {
   
   const { geoJSON, count, layerColorExpression, vehicles } = useVehicles(selectedRoute);
   const t = useMemo(() => createTranslator(language), [language]);
-  const filteredVehicles = useMemo(() => {
+  const routeCountsFallback = useMemo(() => {
     const all = vehicles as Vehicle[];
-    if (selectedRoute === 'ALL') return all;
-    const key = selectedRoute.toUpperCase();
-    return all.filter((v) => String(v.route_id || '').toUpperCase() === key);
-  }, [vehicles, selectedRoute]);
+    const map = all.reduce<Record<string, number>>((acc, v) => {
+      const route = String(v.route_id || '').toUpperCase();
+      if (!route) return acc;
+      acc[route] = (acc[route] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([routeId, vehicleCount]) => ({ route_id: routeId, vehicle_count: vehicleCount }));
+  }, [vehicles]);
+
+  const { data: insights } = useQuery({
+    queryKey: ['vehicleInsights', selectedRoute, timeRange, compareMode],
+    queryFn: () =>
+      fetchVehicleInsights({
+        route: selectedRoute,
+        range: timeRange,
+        compare: compareMode,
+      }),
+    refetchInterval: 10000,
+    staleTime: 5000,
+  });
+
+  const trend = useMemo<VehicleInsights>(() => {
+    if (insights) return insights;
+    return {
+      route: selectedRoute,
+      range: timeRange,
+      compare: compareMode,
+      series: [{ ts: Date.now(), count }],
+      current_avg: count,
+      previous_avg: null,
+      delta: null,
+      delta_percent: null,
+      top_routes: routeCountsFallback,
+    };
+  }, [insights, selectedRoute, timeRange, compareMode, count, routeCountsFallback]);
 
   const unreadCount = useMemo(
     () => notificationCenter.filter((n) => !n.is_read).length,
@@ -118,86 +154,6 @@ const TransitMap = () => {
     }, 30000);
     return () => window.clearInterval(timer);
   }, [user]);
-
-  useEffect(() => {
-    // Route context changed, restart chart history for cleaner comparison.
-    setHistory([]);
-  }, [selectedRoute]);
-
-  useEffect(() => {
-    const now = Date.now();
-    const routeCounts = filteredVehicles.reduce<Record<string, number>>((acc, v) => {
-      const route = String(v.route_id || '').toUpperCase();
-      if (!route) return acc;
-      acc[route] = (acc[route] || 0) + 1;
-      return acc;
-    }, {});
-
-    setHistory((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && now - last.ts < 2500 && last.total === filteredVehicles.length) return prev;
-      const next = [...prev, { ts: now, total: filteredVehicles.length, routeCounts }];
-      return next.slice(-720); // roughly keep about 36 minutes @3s samples
-    });
-  }, [filteredVehicles]);
-
-  const rangeMs = useMemo(() => {
-    if (timeRange === '15m') return 15 * 60 * 1000;
-    if (timeRange === '6h') return 6 * 60 * 60 * 1000;
-    if (timeRange === '24h') return 24 * 60 * 60 * 1000;
-    return 60 * 60 * 1000;
-  }, [timeRange]);
-
-  const trend = useMemo(() => {
-    const now = Date.now();
-    const currentStart = now - rangeMs;
-    const currentWindow = history.filter((s) => s.ts >= currentStart);
-    const currentSeries = currentWindow.length > 0 ? currentWindow : history.slice(-1);
-    const trendPoints = currentSeries.map((s) => s.total);
-
-    const currentAvg =
-      currentSeries.length > 0
-        ? Math.round(currentSeries.reduce((sum, s) => sum + s.total, 0) / currentSeries.length)
-        : count;
-
-    let previousAvg: number | null = null;
-    if (compareMode === 'previous') {
-      const previousStart = currentStart - rangeMs;
-      const previousWindow = history.filter((s) => s.ts >= previousStart && s.ts < currentStart);
-      if (previousWindow.length > 0) {
-        previousAvg = Math.round(
-          previousWindow.reduce((sum, s) => sum + s.total, 0) / previousWindow.length
-        );
-      }
-    }
-
-    const comparisonDelta = previousAvg == null ? null : currentAvg - previousAvg;
-    const comparisonPercent =
-      previousAvg == null || previousAvg === 0 || comparisonDelta == null
-        ? null
-        : Math.round((comparisonDelta / previousAvg) * 100);
-
-    const fallbackRouteCounts = filteredVehicles.reduce<Record<string, number>>((acc, v) => {
-      const route = String(v.route_id || '').toUpperCase();
-      if (!route) return acc;
-      acc[route] = (acc[route] || 0) + 1;
-      return acc;
-    }, {});
-
-    const routeCounts = history[history.length - 1]?.routeCounts || fallbackRouteCounts;
-    const topRoutes = Object.entries(routeCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([routeId, vehicleCount]) => ({ routeId, vehicleCount }));
-
-    return {
-      trendPoints,
-      currentAvg,
-      comparisonDelta,
-      comparisonPercent,
-      topRoutes,
-    };
-  }, [history, rangeMs, compareMode, filteredVehicles, count]);
 
   const handleSubmitAuth = async () => {
     try {
@@ -392,11 +348,11 @@ const TransitMap = () => {
         compareMode={compareMode}
         onTimeRangeChange={setTimeRange}
         onCompareModeChange={setCompareMode}
-        trendPoints={trend.trendPoints}
-        averageCount={trend.currentAvg}
-        comparisonDelta={trend.comparisonDelta}
-        comparisonPercent={trend.comparisonPercent}
-        topRoutes={trend.topRoutes}
+        trendPoints={trend.series.map((p) => p.count)}
+        averageCount={trend.current_avg}
+        comparisonDelta={trend.delta}
+        comparisonPercent={trend.delta_percent}
+        topRoutes={trend.top_routes.map((r) => ({ routeId: r.route_id, vehicleCount: r.vehicle_count }))}
         language={language}
         onLanguageChange={setLanguage}
         t={t}

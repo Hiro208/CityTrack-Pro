@@ -59,6 +59,7 @@ export class MtaService {
 
     if (allVehicles.length > 0) {
       await VehicleRepository.saveBatch(allVehicles);
+      await VehicleRepository.saveMetricsSnapshot(allVehicles);
       await redisClient.set('vehicles:all', JSON.stringify(allVehicles), { EX: 60 });
     }
 

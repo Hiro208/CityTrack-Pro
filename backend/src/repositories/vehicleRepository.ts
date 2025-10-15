@@ -3,6 +3,31 @@ import pool from '../config/database';
 import { VehiclePositionRow } from '../models/Vehicle'; 
 import redisClient from '../config/redis';
 
+type InsightsRange = '15m' | '1h' | '6h' | '24h';
+type InsightsCompare = 'none' | 'previous';
+
+export interface VehicleInsightPoint {
+  ts: number;
+  count: number;
+}
+
+export interface VehicleInsightTopRoute {
+  route_id: string;
+  vehicle_count: number;
+}
+
+export interface VehicleInsightsResult {
+  range: InsightsRange;
+  compare: InsightsCompare;
+  route: string;
+  series: VehicleInsightPoint[];
+  current_avg: number;
+  previous_avg: number | null;
+  delta: number | null;
+  delta_percent: number | null;
+  top_routes: VehicleInsightTopRoute[];
+}
+
 export class VehicleRepository {
   
   static async findAll(): Promise<VehiclePositionRow[]> {
@@ -80,6 +105,150 @@ export class VehicleRepository {
     } finally {
       client.release();
     }
+  }
+
+  static async saveMetricsSnapshot(vehicles: any[]): Promise<void> {
+    const snapshotTs = Math.floor(Date.now() / 1000);
+    const routeCounts = vehicles.reduce<Record<string, number>>((acc, v) => {
+      const routeId = String(v.route_id || '').toUpperCase();
+      if (!routeId) return acc;
+      acc[routeId] = (acc[routeId] || 0) + 1;
+      return acc;
+    }, {});
+
+    const rows: Array<{ routeId: string; count: number }> = [
+      { routeId: 'ALL', count: vehicles.length },
+      ...Object.entries(routeCounts).map(([routeId, count]) => ({ routeId, count })),
+    ];
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const upsert = `
+        INSERT INTO vehicle_metrics_snapshots (snapshot_ts, route_id, vehicle_count)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (snapshot_ts, route_id)
+        DO UPDATE SET vehicle_count = EXCLUDED.vehicle_count
+      `;
+      for (const row of rows) {
+        await client.query(upsert, [snapshotTs, row.routeId, row.count]);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('🔥 保存车辆指标快照失败:', error);
+    } finally {
+      client.release();
+    }
+  }
+
+  static async getInsights(params: {
+    route?: string;
+    range?: string;
+    compare?: string;
+  }): Promise<VehicleInsightsResult> {
+    const route = String(params.route || 'ALL').toUpperCase();
+    const range = (params.range || '1h') as InsightsRange;
+    const compare = (params.compare || 'previous') as InsightsCompare;
+
+    const rangeMap: Record<InsightsRange, number> = {
+      '15m': 15 * 60,
+      '1h': 60 * 60,
+      '6h': 6 * 60 * 60,
+      '24h': 24 * 60 * 60,
+    };
+    const safeRange: InsightsRange = rangeMap[range] ? range : '1h';
+    const safeCompare: InsightsCompare = compare === 'none' ? 'none' : 'previous';
+    const nowTs = Math.floor(Date.now() / 1000);
+    const currentStartTs = nowTs - rangeMap[safeRange];
+
+    const seriesSql = `
+      SELECT snapshot_ts, vehicle_count
+      FROM vehicle_metrics_snapshots
+      WHERE route_id = $1
+        AND snapshot_ts >= $2
+      ORDER BY snapshot_ts ASC
+    `;
+    const seriesRes = await query<{ snapshot_ts: number; vehicle_count: number }>(seriesSql, [
+      route,
+      currentStartTs,
+    ]);
+    const series = seriesRes.rows.map((r) => ({
+      ts: Number(r.snapshot_ts) * 1000,
+      count: Number(r.vehicle_count),
+    }));
+
+    const avgSql = `
+      SELECT ROUND(AVG(vehicle_count))::int AS avg_count
+      FROM vehicle_metrics_snapshots
+      WHERE route_id = $1
+        AND snapshot_ts >= $2
+    `;
+    const currentAvgRes = await query<{ avg_count: number | null }>(avgSql, [route, currentStartTs]);
+    const currentAvg = Number(currentAvgRes.rows[0]?.avg_count ?? 0);
+
+    let previousAvg: number | null = null;
+    if (safeCompare === 'previous') {
+      const previousStartTs = currentStartTs - rangeMap[safeRange];
+      const previousAvgRes = await query<{ avg_count: number | null }>(avgSql, [route, previousStartTs]);
+      const previousWindowAvgRes = await query<{ avg_count: number | null }>(
+        `
+        SELECT ROUND(AVG(vehicle_count))::int AS avg_count
+        FROM vehicle_metrics_snapshots
+        WHERE route_id = $1
+          AND snapshot_ts >= $2
+          AND snapshot_ts < $3
+      `,
+        [route, previousStartTs, currentStartTs]
+      );
+      previousAvg = previousWindowAvgRes.rows[0]?.avg_count ?? previousAvgRes.rows[0]?.avg_count ?? null;
+      if (previousAvg != null) previousAvg = Number(previousAvg);
+    }
+
+    const delta = previousAvg == null ? null : currentAvg - previousAvg;
+    const deltaPercent =
+      previousAvg == null || previousAvg === 0 || delta == null
+        ? null
+        : Math.round((delta / previousAvg) * 100);
+
+    const topRoutesRes = route === 'ALL'
+      ? await query<{ route_id: string; vehicle_count: number }>(
+          `
+          SELECT route_id, ROUND(AVG(vehicle_count))::int AS vehicle_count
+          FROM vehicle_metrics_snapshots
+          WHERE route_id <> 'ALL'
+            AND snapshot_ts >= $1
+          GROUP BY route_id
+          ORDER BY vehicle_count DESC
+          LIMIT 5
+        `,
+          [currentStartTs]
+        )
+      : await query<{ route_id: string; vehicle_count: number }>(
+          `
+          SELECT route_id, ROUND(AVG(vehicle_count))::int AS vehicle_count
+          FROM vehicle_metrics_snapshots
+          WHERE route_id = $1
+            AND snapshot_ts >= $2
+          GROUP BY route_id
+        `,
+          [route, currentStartTs]
+        );
+
+    return {
+      range: safeRange,
+      compare: safeCompare,
+      route,
+      series,
+      current_avg: currentAvg,
+      previous_avg: previousAvg,
+      delta,
+      delta_percent: deltaPercent,
+      top_routes: topRoutesRes.rows.map((r) => ({
+        route_id: String(r.route_id),
+        vehicle_count: Number(r.vehicle_count),
+      })),
+    };
   }
 
   static async pruneOldData(): Promise<number> {

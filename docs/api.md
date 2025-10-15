@@ -48,6 +48,41 @@ Returns latest vehicle positions for map rendering.
 }
 ```
 
+### GET `/api/vehicles/insights`
+Returns trend analytics for a selected route/time window, including comparison data.
+
+Query params:
+- `route`: route id or `ALL` (default `ALL`)
+- `range`: `15m` | `1h` | `6h` | `24h` (default `1h`)
+- `compare`: `none` | `previous` (default `previous`)
+
+Example:
+`GET /api/vehicles/insights?route=ALL&range=1h&compare=previous`
+
+**Response 200**
+```json
+{
+  "success": true,
+  "data": {
+    "range": "1h",
+    "compare": "previous",
+    "route": "ALL",
+    "series": [
+      { "ts": 1739700000000, "count": 241 },
+      { "ts": 1739700010000, "count": 246 }
+    ],
+    "current_avg": 244,
+    "previous_avg": 232,
+    "delta": 12,
+    "delta_percent": 5,
+    "top_routes": [
+      { "route_id": "A", "vehicle_count": 24 },
+      { "route_id": "C", "vehicle_count": 20 }
+    ]
+  }
+}
+```
+
 ---
 
 ## 3) Authentication

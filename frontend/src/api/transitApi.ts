@@ -8,6 +8,7 @@ import type {
   ServiceAlert,
   User,
   Vehicle,
+  VehicleInsights,
 } from '../types/transit';
 
 // 如果你的后端端口是 5001，请保持这个地址
@@ -41,6 +42,17 @@ export const fetchVehicles = async (): Promise<Vehicle[]> => {
     console.error('Failed to fetch vehicles:', error);
     return []; // 出错时返回空数组，防止页面崩溃
   }
+};
+
+export const fetchVehicleInsights = async (params: {
+  range: '15m' | '1h' | '6h' | '24h';
+  compare: 'none' | 'previous';
+  route: string;
+}): Promise<VehicleInsights> => {
+  const response = await api.get<{ success: boolean; data: VehicleInsights }>('/vehicles/insights', {
+    params,
+  });
+  return response.data.data;
 };
 
 export const register = async (email: string, password: string): Promise<{ token: string; user: User }> => {
