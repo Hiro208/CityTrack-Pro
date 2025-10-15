@@ -63,12 +63,14 @@ flowchart LR
 4. Persist/upsert into `vehicle_positions`.
 5. Write per-route metric snapshots into `vehicle_metrics_snapshots`.
 6. Frontend reads from `GET /api/vehicles`.
+7. Effective capacity: up to `8,640` ingestion cycles/day.
 
 ### 1.1) Time-window analytics flow
 1. Frontend requests `GET /api/vehicles/insights` with `route/range/compare`.
 2. Backend queries `vehicle_metrics_snapshots` for current window series.
 3. Backend computes current average, previous-window average, delta, and top routes.
 4. UI renders sparkline + comparison badge + route ranking bars.
+5. Supported windows: `15m`, `1h`, `6h`, `24h`.
 
 ### 2) Alert ingestion (every 60s)
 1. `AlertService.fetchAndSaveAlerts()` pulls MTA alerts JSON.
@@ -76,6 +78,7 @@ flowchart LR
 3. Upsert alerts to `service_alerts`.
 4. Match with user favorites and create `notifications`.
 5. Dispatch email via SMTP (if enabled/configured).
+6. Effective capacity: up to `1,440` alert sync cycles/day.
 
 ### 3) User personalization flow
 1. User logs in via `/api/auth/login` and receives JWT.
@@ -89,6 +92,13 @@ flowchart LR
 - **Layered backend**: routes -> controllers -> services -> repositories.
 - **Data separation**: operational data in PostgreSQL, hot access in Redis.
 - **Feed compatibility**: alerts consume JSON feed that does not require API key.
+- **Product-oriented analytics**: trend API exposes compare-ready metrics for user decisions, not just raw points.
+
+## Frontend UX Notes
+
+- Insight card supports time-range and compare controls.
+- Trend chart renders sparkline + delta percentage + top-route ranking.
+- Dropdown open state adds contextual glow feedback to improve interaction clarity.
 
 ## Current Improvement Opportunities
 

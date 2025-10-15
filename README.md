@@ -22,10 +22,21 @@ This project demonstrates practical product engineering around urban mobility da
 - Trend insights API (`/api/vehicles/insights`)
 - Time range compare UI (`15m / 1h / 6h / 24h` vs previous window)
 - Route activity ranking and sparkline
+- Styled cyber-theme dropdown interactions with contextual glow feedback
 - JWT login/register
 - Favorite routes and stops
 - Alert matching + notification center
 - Multi-language frontend (`en`, `zh`, `es`)
+
+## Quantified System Metrics
+
+- Vehicle ingestion cadence: every 10s (theoretical max `8,640` scheduled cycles/day)
+- Alerts sync cadence: every 60s (theoretical max `1,440` scheduled cycles/day)
+- Frontend live refresh: every 3s for map vehicles (`20` updates/minute)
+- Trend window support: `15m / 1h / 6h / 24h`
+- Max trend points per route per day (10s snapshots): up to `8,640`
+- Top route ranking output: up to `5` routes per window
+- Note: scheduled-cycle capacity is theoretical upper bound; actual successful cycles depend on upstream API/network availability.
 
 ## Repository Structure
 
@@ -103,4 +114,8 @@ Use this project to show:
 - product-oriented frontend with meaningful data interactions
 - robust backend data ingestion under imperfect external feeds
 - full-stack ownership from API design to UI delivery
+
+## Resume-Ready Summary
+
+Built a full-stack real-time transit analytics platform using React, TypeScript, Node.js, and PostgreSQL, including live map rendering, personalized notifications, and time-window comparison insights. Engineered 10-second ingestion pipelines (theoretical max 8,640 scheduled cycles/day), 24-hour trend analytics, and route-level ranking to help users understand service changes and make better travel decisions.
 
