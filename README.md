@@ -31,7 +31,7 @@ This project demonstrates practical product engineering around urban mobility da
 
 ## Demo Video
 
-[- Product walkthrough (MP4): [`docs/assets/20260217-005206.mp4`](docs/assets/20260217-005206.mp4)](https://github.com/user-attachments/assets/0be63009-00c7-456b-b1dc-ba7b15b27dd9)
+https://github.com/user-attachments/assets/0be63009-00c7-456b-b1dc-ba7b15b27dd9
 
 ## Quantified System Metrics
 
