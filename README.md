@@ -4,7 +4,9 @@ Full-stack transit analytics platform for real-time subway monitoring, user pers
 
 ## Demo Video
 
-https://github.com/user-attachments/assets/0be63009-00c7-456b-b1dc-ba7b15b27dd9
+https://github.com/user-attachments/assets/5cb0e0e1-b12e-4d1b-aa02-6a2be8695f95
+
+7b15b27dd9
 
 ## Why this project matters
 
