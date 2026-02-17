@@ -94,16 +94,3 @@ flowchart LR
 - **Feed compatibility**: alerts consume JSON feed that does not require API key.
 - **Product-oriented analytics**: trend API exposes compare-ready metrics for user decisions, not just raw points.
 
-## Frontend UX Notes
-
-- Insight card supports time-range and compare controls.
-- Trend chart renders sparkline + delta percentage + top-route ranking.
-- Dropdown open state adds contextual glow feedback to improve interaction clarity.
-
-## Current Improvement Opportunities
-
-- Add OpenAPI/Swagger documentation for all endpoints.
-- Add automated tests (auth, favorites, notifications, fallback parsing).
-- Add structured logging and request tracing IDs.
-- Add CI pipeline (lint + test + build).
-
