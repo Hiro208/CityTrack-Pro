@@ -115,14 +115,3 @@ Backend default URL: `http://localhost:5001`
 - API contracts: `docs/api.md`
 - Backend env setup: `backend/.env.required.md`
 
-## Interview Positioning
-
-Use this project to show:
-- product-oriented frontend with meaningful data interactions
-- robust backend data ingestion under imperfect external feeds
-- full-stack ownership from API design to UI delivery
-
-## Resume-Ready Summary
-
-Built a full-stack real-time transit analytics platform using React, TypeScript, Node.js, and PostgreSQL, including live map rendering, personalized notifications, and time-window comparison insights. Engineered 10-second ingestion pipelines (theoretical max 8,640 scheduled cycles/day), 24-hour trend analytics, and route-level ranking to help users understand service changes and make better travel decisions.
-
