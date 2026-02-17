@@ -21,6 +21,7 @@ export interface VehicleInsightsResult {
   compare: InsightsCompare;
   route: string;
   series: VehicleInsightPoint[];
+  previous_series: VehicleInsightPoint[];
   current_avg: number;
   previous_avg: number | null;
   delta: number | null;
@@ -177,6 +178,7 @@ export class VehicleRepository {
       ts: Number(r.snapshot_ts) * 1000,
       count: Number(r.vehicle_count),
     }));
+    let previousSeries: VehicleInsightPoint[] = [];
 
     const avgSql = `
       SELECT ROUND(AVG(vehicle_count))::int AS avg_count
@@ -190,6 +192,22 @@ export class VehicleRepository {
     let previousAvg: number | null = null;
     if (safeCompare === 'previous') {
       const previousStartTs = currentStartTs - rangeMap[safeRange];
+      const previousSeriesRes = await query<{ snapshot_ts: number; vehicle_count: number }>(
+        `
+        SELECT snapshot_ts, vehicle_count
+        FROM vehicle_metrics_snapshots
+        WHERE route_id = $1
+          AND snapshot_ts >= $2
+          AND snapshot_ts < $3
+        ORDER BY snapshot_ts ASC
+      `,
+        [route, previousStartTs, currentStartTs]
+      );
+      previousSeries = previousSeriesRes.rows.map((r) => ({
+        ts: Number(r.snapshot_ts) * 1000,
+        count: Number(r.vehicle_count),
+      }));
+
       const previousAvgRes = await query<{ avg_count: number | null }>(avgSql, [route, previousStartTs]);
       const previousWindowAvgRes = await query<{ avg_count: number | null }>(
         `
@@ -240,6 +258,7 @@ export class VehicleRepository {
       compare: safeCompare,
       route,
       series,
+      previous_series: previousSeries,
       current_avg: currentAvg,
       previous_avg: previousAvg,
       delta,

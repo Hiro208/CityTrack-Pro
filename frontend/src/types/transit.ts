@@ -74,6 +74,7 @@ export interface VehicleInsights {
   compare: 'none' | 'previous';
   route: string;
   series: VehicleInsightPoint[];
+  previous_series: VehicleInsightPoint[];
   current_avg: number;
   previous_avg: number | null;
   delta: number | null;

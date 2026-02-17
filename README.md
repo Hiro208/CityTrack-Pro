@@ -28,6 +28,10 @@ This project demonstrates practical product engineering around urban mobility da
 - Alert matching + notification center
 - Multi-language frontend (`en`, `zh`, `es`)
 
+## Demo Video
+
+- Product walkthrough (MP4): [`docs/assets/20260217-005206.mp4`](docs/assets/20260217-005206.mp4)
+
 ## Quantified System Metrics
 
 - Vehicle ingestion cadence: every 10s (theoretical max `8,640` scheduled cycles/day)

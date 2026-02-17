@@ -1,7 +1,7 @@
 // src/components/ControlPanel.tsx
 import React from 'react';
 import { ROUTE_COLORS } from '../config/constants';
-import type { FavoriteStop, NotificationItem, NotificationSettings, User } from '../types/transit';
+import type { FavoriteStop, NotificationItem, NotificationSettings, User, VehicleInsightPoint } from '../types/transit';
 import type { Language, TranslateFn } from '../i18n';
 
 interface DropdownOption {
@@ -73,7 +73,8 @@ interface Props {
   compareMode: 'none' | 'previous';
   onTimeRangeChange: (range: '15m' | '1h' | '6h' | '24h') => void;
   onCompareModeChange: (mode: 'none' | 'previous') => void;
-  trendPoints: number[];
+  trendSeries: VehicleInsightPoint[];
+  previousTrendSeries: VehicleInsightPoint[];
   averageCount: number;
   comparisonDelta: number | null;
   comparisonPercent: number | null;
@@ -107,7 +108,8 @@ const ControlPanel: React.FC<Props> = ({
   compareMode,
   onTimeRangeChange,
   onCompareModeChange,
-  trendPoints,
+  trendSeries,
+  previousTrendSeries,
   averageCount,
   comparisonDelta,
   comparisonPercent,
@@ -133,6 +135,7 @@ const ControlPanel: React.FC<Props> = ({
   unreadCount,
 }) => {
   const [selectedNotification, setSelectedNotification] = React.useState<NotificationItem | null>(null);
+  const [insightExpanded, setInsightExpanded] = React.useState(false);
   const [insightDropdownOpen, setInsightDropdownOpen] = React.useState({
     range: false,
     compare: false,
@@ -141,10 +144,38 @@ const ControlPanel: React.FC<Props> = ({
   const closeNotificationModal = () => setSelectedNotification(null);
   const sectionClass = 'mt-4 rounded-2xl border border-green-500/35 bg-black/35 p-4';
   const isInsightOpen = insightDropdownOpen.range || insightDropdownOpen.compare;
-  const chartPoints = trendPoints.length > 1 ? trendPoints : [count, count];
-  const minPoint = Math.min(...chartPoints);
-  const maxPoint = Math.max(...chartPoints);
+  const currentWindowPoints = trendSeries.map((p) => p.count);
+  const previousWindowPoints = previousTrendSeries.map((p) => p.count);
+  const chartPoints = currentWindowPoints.length > 1 ? currentWindowPoints : [count, count];
+  const currentMinPoint = Math.min(...chartPoints);
+  const currentMaxPoint = Math.max(...chartPoints);
+  const hasPreviousSeries = compareMode === 'previous' && previousWindowPoints.length > 1;
+  const yScalePoints = hasPreviousSeries ? [...chartPoints, ...previousWindowPoints] : chartPoints;
+  const minPoint = Math.min(...yScalePoints);
+  const maxPoint = Math.max(...yScalePoints);
   const pointRange = Math.max(maxPoint - minPoint, 1);
+  const latestPoint = chartPoints[chartPoints.length - 1] ?? count;
+  const firstPoint = chartPoints[0] ?? count;
+  const startToNowDelta = latestPoint - firstPoint;
+  const startToNowPercent = firstPoint === 0 ? null : Math.round((startToNowDelta / firstPoint) * 100);
+  const mean = chartPoints.reduce((sum, v) => sum + v, 0) / chartPoints.length;
+  const variance = chartPoints.reduce((sum, v) => sum + (v - mean) ** 2, 0) / chartPoints.length;
+  const volatility = Number(Math.sqrt(variance).toFixed(1));
+  const anomalyThreshold = Math.max(volatility * 1.6, 3);
+  const anomalyIndexes = chartPoints
+    .map((value, idx) => ({ idx, value }))
+    .filter((item) => Math.abs(item.value - mean) >= anomalyThreshold)
+    .map((item) => item.idx);
+  const anomalySet = new Set(anomalyIndexes);
+  const peakIndex = chartPoints.findIndex((p) => p === currentMaxPoint);
+  const troughIndex = chartPoints.findIndex((p) => p === currentMinPoint);
+  const topRouteSharePercent =
+    topRoutes.length > 0 && averageCount > 0
+      ? Math.round((topRoutes[0].vehicleCount / averageCount) * 100)
+      : null;
+  const trendSummaryKey =
+    startToNowDelta > 2 ? 'gettingBusier' : startToNowDelta < -2 ? 'gettingCalmer' : 'mostlyStable';
+
   const sparklinePath = chartPoints
     .map((point, idx) => {
       const x = (idx / (chartPoints.length - 1 || 1)) * 100;
@@ -154,6 +185,31 @@ const ControlPanel: React.FC<Props> = ({
     })
     .join(' ');
   const maxRouteCount = topRoutes.length > 0 ? Math.max(...topRoutes.map((r) => r.vehicleCount)) : 1;
+  const detailedPoints = chartPoints.map((point, idx) => {
+    const x = (idx / (chartPoints.length - 1 || 1)) * 100;
+    const y = 92 - ((point - minPoint) / pointRange) * 84;
+    return { idx, x, y, point };
+  });
+  const previousDetailedPoints = previousWindowPoints.map((point, idx) => {
+    const x = (idx / (previousWindowPoints.length - 1 || 1)) * 100;
+    const y = 92 - ((point - minPoint) / pointRange) * 84;
+    return { idx, x, y, point };
+  });
+  const detailedPath = detailedPoints.map((p) => `${p.x},${p.y}`).join(' ');
+  const previousDetailedPath = previousDetailedPoints.map((p) => `${p.x},${p.y}`).join(' ');
+  const formatSigned = (value: number) => (value >= 0 ? `+${value}` : `${value}`);
+  const tickIndices = (() => {
+    if (trendSeries.length <= 1) return [0];
+    const raw = [0, Math.floor((trendSeries.length - 1) / 3), Math.floor(((trendSeries.length - 1) * 2) / 3), trendSeries.length - 1];
+    return Array.from(new Set(raw));
+  })();
+  const formatTickTime = (ts?: number) => {
+    if (!ts) return '--:--';
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  };
 
   return (
     <>
@@ -225,7 +281,16 @@ const ControlPanel: React.FC<Props> = ({
         >
           <div className="mb-3 flex items-center justify-between">
             <div className="text-sm font-semibold text-white">{t('insightWindow')}</div>
-            <div className="text-[11px] text-gray-400">{t('windowAvg')}: {averageCount}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-[11px] text-gray-400">{t('windowAvg')}: {averageCount}</div>
+              <button
+                type="button"
+                onClick={() => setInsightExpanded(true)}
+                className="rounded-md border border-green-400/35 px-2 py-1 text-[10px] font-semibold text-green-200 transition hover:bg-green-500/15"
+              >
+                {t('expand')}
+              </button>
+            </div>
           </div>
           <div className="mb-3 grid grid-cols-2 gap-2">
             <StyledDropdown
@@ -314,21 +379,8 @@ const ControlPanel: React.FC<Props> = ({
           </div>
         </div>
 
-        <div className={sectionClass}>
-          {user ? (
-            <div>
-              <div className="text-sm font-semibold text-white">
-                {t('signedInAs')}: <span className="text-white">{user.email}</span>
-              </div>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="mt-3 w-full rounded-xl border border-green-500/35 bg-black/35 py-2 text-sm font-medium text-white transition hover:bg-black/45"
-              >
-                {t('signOut')}
-              </button>
-            </div>
-          ) : (
+        {!user ? (
+          <div className={sectionClass}>
             <div>
               <div className="mb-3 flex overflow-hidden rounded-xl border border-green-500/35 text-xs">
                 <button
@@ -368,8 +420,8 @@ const ControlPanel: React.FC<Props> = ({
                 {authMode === 'login' ? t('login') : t('createAccount')}
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        ) : null}
 
         {user ? (
           <>
@@ -473,6 +525,18 @@ const ControlPanel: React.FC<Props> = ({
                 <div className="text-xs text-yellow-100/80">{t('noNotifications')}</div>
               )}
             </div>
+            <div className={sectionClass}>
+              <div className="text-sm font-semibold text-white">
+                {t('signedInAs')}: <span className="text-white">{user.email}</span>
+              </div>
+              <button
+                type="button"
+                onClick={onLogout}
+                className="mt-3 w-full rounded-xl border border-green-500/35 bg-black/35 py-2 text-sm font-medium text-white transition hover:bg-black/45"
+              >
+                {t('signOut')}
+              </button>
+            </div>
           </>
         ) : null}
       </div>
@@ -515,6 +579,183 @@ const ControlPanel: React.FC<Props> = ({
                 </div>
                 <div className="mt-1">
                   {t('createdAt')}: {new Date(selectedNotification.created_at).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {insightExpanded ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-[2px] px-4"
+          onClick={() => setInsightExpanded(false)}
+        >
+          <div
+            className="w-full max-w-5xl max-h-[86vh] overflow-auto rounded-2xl border border-green-500/35 bg-neutral-950 text-white shadow-[0_0_36px_rgba(34,197,94,0.2)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-green-500/20 bg-neutral-950/95 px-5 py-4 backdrop-blur">
+              <div>
+                <h3 className="text-xl font-bold">{t('detailedInsights')}</h3>
+                <div className="mt-1 text-sm text-gray-300">{t('trendSummary')}: {t(trendSummaryKey)}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInsightExpanded(false)}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-gray-100 transition hover:bg-white/[0.08]"
+              >
+                {t('close')}
+              </button>
+            </div>
+
+            <div className="space-y-4 px-5 py-4">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                <div className="rounded-xl border border-green-500/25 bg-black/30 p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">{t('currentSnapshot')}</div>
+                  <div className="mt-1 text-2xl font-extrabold text-green-200">{latestPoint}</div>
+                </div>
+                <div className="rounded-xl border border-green-500/25 bg-black/30 p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">{t('startToNow')}</div>
+                  <div className={`mt-1 text-2xl font-extrabold ${startToNowDelta >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                    {formatSigned(startToNowDelta)}
+                    {startToNowPercent != null ? (
+                      <span className="ml-1 text-sm font-semibold">
+                        ({formatSigned(startToNowPercent)}%)
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-green-500/25 bg-black/30 p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">{t('peakValue')} / {t('troughValue')}</div>
+                  <div className="mt-1 text-2xl font-extrabold text-white">{maxPoint} / {minPoint}</div>
+                </div>
+                <div className="rounded-xl border border-green-500/25 bg-black/30 p-3">
+                  <div className="text-[11px] uppercase tracking-wide text-gray-400">{t('volatility')}</div>
+                  <div className="mt-1 text-2xl font-extrabold text-white">{volatility}</div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-green-500/25 bg-black/25 p-3">
+                <div className="mb-2 flex items-center justify-between text-xs text-gray-300">
+                  <span>{t('insightWindow')}</span>
+                  <span>{t('windowAvg')}: {averageCount}</span>
+                </div>
+                <div className="h-64 rounded-lg border border-green-500/20 bg-black/40 p-2">
+                  <svg
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                    className="h-full w-full"
+                  >
+                    <defs>
+                      <linearGradient id="trendStrokeDetailed" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="rgba(34,197,94,0.45)" />
+                        <stop offset="100%" stopColor="rgba(74,222,128,1)" />
+                      </linearGradient>
+                    </defs>
+                    <polyline
+                      fill="none"
+                      stroke="url(#trendStrokeDetailed)"
+                      strokeWidth="2.4"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      points={detailedPath}
+                    />
+                    {hasPreviousSeries ? (
+                      <polyline
+                        fill="none"
+                        stroke="rgba(148,163,184,0.9)"
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
+                        strokeDasharray="2 2"
+                        points={previousDetailedPath}
+                      />
+                    ) : null}
+                    {detailedPoints.map((p, idx) => (
+                      <circle
+                        key={`${p.idx}-${p.point}`}
+                        cx={p.x}
+                        cy={p.y}
+                        r={1.1}
+                        fill={anomalySet.has(idx) ? '#f87171' : '#4ade80'}
+                      />
+                    ))}
+                    <line x1={0} y1={95} x2={100} y2={95} stroke="rgba(148,163,184,0.45)" strokeWidth="0.5" />
+                  </svg>
+                </div>
+                <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-slate-300">
+                  {tickIndices.map((tickIdx) => (
+                    <span
+                      key={`tick-label-${tickIdx}`}
+                      className="select-none"
+                      style={{ fontVariantNumeric: 'tabular-nums' }}
+                    >
+                      {formatTickTime(trendSeries[tickIdx]?.ts)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div className="rounded-xl border border-green-500/25 bg-black/25 p-3">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-gray-400">{t('topActiveRoutes')}</div>
+                  {topRoutes.length > 0 ? (
+                    <div className="space-y-2">
+                      {topRoutes.map((route) => {
+                        const width = Math.max((route.vehicleCount / maxRouteCount) * 100, 8);
+                        return (
+                          <div key={`expanded-${route.routeId}`} className="flex items-center gap-2 text-xs">
+                            <span className="w-5 font-semibold text-green-300">{route.routeId}</span>
+                            <div className="h-2 flex-1 rounded-full bg-black/50">
+                              <div
+                                className="h-2 rounded-full bg-gradient-to-r from-green-500/55 to-green-300/80"
+                                style={{ width: `${width}%` }}
+                              />
+                            </div>
+                            <span className="w-7 text-right text-gray-300">{route.vehicleCount}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500">{t('noRouteData')}</div>
+                  )}
+                </div>
+                <div className="rounded-xl border border-green-500/25 bg-black/25 p-3 text-sm text-gray-200">
+                  <div className="text-xs uppercase tracking-wide text-gray-400">{t('trendSummary')}</div>
+                  <div className="mt-2">{t(trendSummaryKey)}</div>
+                  <div className="mt-2 flex items-center gap-3 text-xs">
+                    <span className="inline-flex items-center gap-1 text-green-300">
+                      <span className="h-2 w-2 rounded-full bg-green-300" />
+                      {t('currentWindow')}
+                    </span>
+                    {hasPreviousSeries ? (
+                      <span className="inline-flex items-center gap-1 text-slate-300">
+                        <span className="h-[2px] w-3 bg-slate-300" />
+                        {t('previousWindow')}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300">
+                    {comparisonDelta == null
+                      ? t('noComparisonData')
+                      : `${formatSigned(comparisonDelta)} ${t('vsPrevious')}${
+                          comparisonPercent != null ? ` (${formatSigned(comparisonPercent)}%)` : ''
+                        }`}
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300">
+                    {t('windowAvg')}: {averageCount}
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300">
+                    {t('peakValue')}: {currentMaxPoint} ({t('samplePoint')} {peakIndex + 1}) | {t('troughValue')}: {currentMinPoint} ({t('samplePoint')} {troughIndex + 1})
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300">
+                    {t('topRouteShare')}: {topRouteSharePercent == null ? '--' : `${topRouteSharePercent}%`}
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300">
+                    {t('anomalyPoints')}: {anomalyIndexes.length} ({t('anomalyHint')})
+                  </div>
                 </div>
               </div>
             </div>

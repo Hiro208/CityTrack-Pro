@@ -98,12 +98,18 @@ const TransitMap = () => {
   });
 
   const trend = useMemo<VehicleInsights>(() => {
-    if (insights) return insights;
+    if (insights) {
+      return {
+        ...insights,
+        previous_series: insights.previous_series || [],
+      };
+    }
     return {
       route: selectedRoute,
       range: timeRange,
       compare: compareMode,
       series: [{ ts: Date.now(), count }],
+      previous_series: [],
       current_avg: count,
       previous_avg: null,
       delta: null,
@@ -348,7 +354,8 @@ const TransitMap = () => {
         compareMode={compareMode}
         onTimeRangeChange={setTimeRange}
         onCompareModeChange={setCompareMode}
-        trendPoints={trend.series.map((p) => p.count)}
+        trendSeries={trend.series}
+        previousTrendSeries={trend.previous_series}
         averageCount={trend.current_avg}
         comparisonDelta={trend.delta}
         comparisonPercent={trend.delta_percent}
