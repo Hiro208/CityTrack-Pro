@@ -2,6 +2,10 @@
 
 Full-stack transit analytics platform for real-time subway monitoring, user personalization, and alert delivery.
 
+## Demo Video
+
+https://github.com/user-attachments/assets/0be63009-00c7-456b-b1dc-ba7b15b27dd9
+
 ## Why this project matters
 
 This project demonstrates practical product engineering around urban mobility data:
@@ -29,9 +33,6 @@ This project demonstrates practical product engineering around urban mobility da
 - Alert matching + notification center
 - Multi-language frontend (`en`, `zh`, `es`)
 
-## Demo Video
-
-https://github.com/user-attachments/assets/0be63009-00c7-456b-b1dc-ba7b15b27dd9
 
 ## Quantified System Metrics
 
